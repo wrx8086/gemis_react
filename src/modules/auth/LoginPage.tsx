@@ -23,7 +23,7 @@ const LoginPage: React.FC = () => {
 
   useEffect(() => {
     loadCompanies();
-    // Letzten Benutzernamen laden
+    // zuletzt benutzten Benutzernamen laden
     const lastUserName = localStorage.getItem('lastUserName');
     if (lastUserName) {
       setUserName(lastUserName);
