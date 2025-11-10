@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSession } from '../../contexts/SessionContext';
 import { Eye, EyeOff } from 'lucide-react';
 import BaseLayout from '../../components/layout/BaseLayout';
+import config from '../../config.json';
 
 interface Company {
   company: string;
@@ -21,13 +22,14 @@ const LoginPage: React.FC = () => {
 
   const { setSession } = useSession();
 
+  // API-URLs aus config
+  const apiBaseUrl = `${config.baseUrl}${config.apiPath}`;
+
   useEffect(() => {
     loadCompanies();
-    // zuletzt benutzten Benutzernamen laden
     const lastUserName = localStorage.getItem('lastUserName');
     if (lastUserName) {
       setUserName(lastUserName);
-      // Focus auf Passwort-Feld setzen
       setTimeout(() => {
         passwordInputRef.current?.focus();
       }, 100);
@@ -36,17 +38,14 @@ const LoginPage: React.FC = () => {
 
   const loadCompanies = async () => {
     try {
-      const response = await fetch('http://APOHVM001.int.anadatprime.ch:8842/web/login/init', {
+      const response = await fetch(`${apiBaseUrl}/login/init`, {
         credentials: 'include'
       });
       const data = await response.json();
       
-      console.log('📋 Companies geladen:', data);
-      
       if (data.companies && data.companies.length > 0) {
         setCompanies(data.companies);
         
-        // Vorausgewählte Company finden
         const selectedComp = data.companies.find((c: Company) => c.selected);
         if (selectedComp) {
           setSelectedCompany(selectedComp.company);
@@ -54,7 +53,6 @@ const LoginPage: React.FC = () => {
           setSelectedCompany(data.companies[0].company);
         }
         
-        // Benutzername vorausfüllen, falls vorhanden
         if (data.user_name) {
           setUserName(data.user_name);
           setTimeout(() => {
@@ -62,7 +60,6 @@ const LoginPage: React.FC = () => {
           }, 100);
         }
       } else {
-        // Fallback
         setCompanies([
           { company: '1000', company_name: 'Test AG', selected: true }
         ]);
@@ -70,7 +67,6 @@ const LoginPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Fehler beim Laden der Companies:', err);
-      // Fallback
       setCompanies([
         { company: '1000', company_name: 'Test AG', selected: true }
       ]);
@@ -84,7 +80,7 @@ const LoginPage: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://APOHVM001.int.anadatprime.ch:8842/web/login', {
+      const response = await fetch(`${apiBaseUrl}/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -100,10 +96,8 @@ const LoginPage: React.FC = () => {
       const data = await response.json();
 
       if (data.success) {
-        // Benutzername für nächstes Mal speichern
         localStorage.setItem('lastUserName', user_name);
         
-        // Session setzen
         setSession({
           session_token: data.session_token || '',
           company: data.company,
@@ -112,7 +106,6 @@ const LoginPage: React.FC = () => {
           language_id: data.language_id
         });
         
-        // Kurz warten damit Session gespeichert wird, dann Seite neu laden
         setTimeout(() => {
           window.location.href = '/dashboard';
         }, 100);
@@ -134,17 +127,17 @@ const LoginPage: React.FC = () => {
     >
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="w-full max-w-md">
-          <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="card">
             {error && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-700 text-sm">
+              <div className="alert-error">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleLogin} className="space-y-6">
               {/* Benutzername */}
-              <div>
-                <label htmlFor="user_name" className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="form-group">
+                <label htmlFor="user_name" className="label">
                   Benutzer:
                 </label>
                 <input
@@ -154,13 +147,13 @@ const LoginPage: React.FC = () => {
                   autoComplete="username"
                   value={user_name}
                   onChange={(e) => setUserName(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="input-field"
                 />
               </div>
 
               {/* Passwort */}
-              <div>
-                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="form-group">
+                <label htmlFor="password" className="label">
                   Passwort:
                 </label>
                 <div className="relative">
@@ -172,7 +165,7 @@ const LoginPage: React.FC = () => {
                     autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent pr-12"
+                    className="input-field pr-12"
                   />
                   <button
                     type="button"
@@ -185,8 +178,8 @@ const LoginPage: React.FC = () => {
               </div>
 
               {/* Company */}
-              <div>
-                <label htmlFor="company" className="block text-sm font-medium text-gray-700 mb-2">
+              <div className="form-group">
+                <label htmlFor="company" className="label">
                   Firma:
                 </label>
                 <select
@@ -194,7 +187,7 @@ const LoginPage: React.FC = () => {
                   name="company"
                   value={selectedCompany}
                   onChange={(e) => setSelectedCompany(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="select-field"
                 >
                   {companies.map((c) => (
                     <option key={c.company} value={c.company}>
@@ -208,7 +201,7 @@ const LoginPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full bg-cyan-500 hover:bg-cyan-600 text-white font-medium py-3 px-4 rounded-md transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                className="btn btn-secondary w-full"
               >
                 {isLoading ? 'Wird angemeldet...' : 'Anmelden'}
               </button>

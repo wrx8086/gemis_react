@@ -33,7 +33,8 @@ const AppContent = () => {
         <Route path="/dashboard" element={<Dashboard />} />
         
         {/* Admin-Bereich */}
-        <Route path="/menu-designer" element={<MenuDesigner />} />
+        {/* WICHTIG: menudesigner Route OHNE Bindestrich, wie im menu_link! */}
+        <Route path="/menudesigner" element={<MenuDesigner />} />
         <Route path="/users" element={<UserManagement />} />
         
         {/* FormDesigner mit Session (innerhalb des Systems) */}
@@ -42,7 +43,7 @@ const AppContent = () => {
         {/* ⭐ STANDALONE FormDesigner OHNE Login/Session */}
         <Route path="/form-designer-standalone" element={<FormDesignerStandalone />} />
 
-        {/* Generische Seite für dynamische Menü-Links */}
+        {/* Generische Seite für dynamische Menü-Links - MUSS AM ENDE STEHEN! */}
         <Route path="/:page" element={<GenericPage />} />
       </Routes>
     </>
