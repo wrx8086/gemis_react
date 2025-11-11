@@ -39,7 +39,26 @@ const getBaseURL = (): string => {
 
 // Session-Header hinzufügen
 const addSessionHeaders = (headers: HeadersInit): HeadersInit => {
-  const session = getSessionData();
+  let session = getSessionData();
+  
+  // FALLBACK: Wenn Session aus Context null ist, direkt aus sessionStorage lesen
+  if (!session) {
+    const sessionToken = sessionStorage.getItem('X-SESSION-TOKEN');
+    const company = sessionStorage.getItem('X-COMPANY');
+    const userName = sessionStorage.getItem('X-USER-NAME');
+    const displayName = sessionStorage.getItem('X-DISPLAY-NAME');
+    const languageId = sessionStorage.getItem('X-LANGUAGE-ID');
+    
+    if (company || userName) {
+      session = {
+        session_token: sessionToken || undefined,
+        company: company || undefined,
+        user_name: userName || undefined,
+        display_name: displayName || undefined,
+        language_id: languageId ? parseInt(languageId) : undefined
+      };
+    }
+  }
   
   if (session) {
     const h = headers as Record<string, string>;

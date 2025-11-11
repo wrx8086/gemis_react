@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GripVertical, X, Save, Download, Search } from 'lucide-react';
 import { apiGet, apiPost } from '../../shared/api/apiClient';
-import '../../FormDesigner.css';
 
 interface Customer {
   id: number;

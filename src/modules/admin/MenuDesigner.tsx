@@ -1,621 +1,586 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, Edit, Trash2, ChevronDown, ChevronRight, Save, Download } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronRight, ChevronDown, Plus, Edit2, Trash2, Save, GripVertical } from 'lucide-react';
 import { apiGet, apiPost } from '../../shared/api/apiClient';
 import BaseLayout from '../../components/layout/BaseLayout';
-import { useSession } from '../../contexts/SessionContext';
-import './MenuDesigner.css';
+
+interface Company {
+  company: string;
+  company_name: string;
+  selected?: boolean;
+}
+
+interface User {
+  user_name: string;
+  display_name: string;
+}
+
+interface Language {
+  language_id: number;
+  language_name: string;
+}
 
 interface MenuItem {
+  menu_id: number;
+  menu_text: string;
+  menu_link: string;
   level1: number;
   level2: number;
   level3: number;
-  menutext: string;
-  menulink: string;
-  uniqueId?: string;
-  source?: string;
+  children?: MenuItem[];
+  isExpanded?: boolean;
+  isEditing?: boolean;
 }
 
-interface MenuItemEdit extends MenuItem {
-  isNew?: boolean;
-  originallevel1?: number;
-  originallevel2?: number;
-  originallevel3?: number;
+interface EditingItem {
+  menu_id: number;
+  menu_text: string;
+  menu_link: string;
 }
 
 const MenuDesigner: React.FC = () => {
-  const { session } = useSession();
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [editingItem, setEditingItem] = useState<MenuItemEdit | null>(null);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  
-  // Customer, User und Language States (für später wenn benötigt)
-  const [selectedCustomer, setSelectedCustomer] = useState<string>('');
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [languages, setLanguages] = useState<Language[]>([]);
+
+  const [selectedCompany, setSelectedCompany] = useState<string>('');
   const [selectedUser, setSelectedUser] = useState<string>('');
   const [selectedLanguage, setSelectedLanguage] = useState<string>('');
 
-  // ⭐ WICHTIG: Beim Component Mount automatisch mit function=init laden
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+  const [editingItem, setEditingItem] = useState<EditingItem | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+
   useEffect(() => {
-    if (session) {
-      loadMenuData();
-    }
-  }, [session]);
+    const loadInitialData = async () => {
+      try {
+        const data = await apiGet('/menudesigner?function=init');
 
-  // Lade Menu-Daten mit function=init
-  const loadMenuData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      
-      console.log('📋 Lade MenuDesigner mit function=init...');
-      
-      // Query mit function=init wie im Dashboard
-      const params = new URLSearchParams({ function: 'init' });
-      const response = await apiGet('/menudesigner', params);
-      
-      console.log('MenuDesigner Response:', response);
-      
-      // Extrahiere Menü-Daten aus verschiedenen möglichen Response-Strukturen
-      let items = [];
-      
-      if (response.menuItems && Array.isArray(response.menuItems)) {
-        items = response.menuItems;
-      } else if (response.menu?.webmenu && Array.isArray(response.menu.webmenu)) {
-        items = response.menu.webmenu;
-      } else if (response.webmenu && Array.isArray(response.webmenu)) {
-        items = response.webmenu;
-      } else if (Array.isArray(response)) {
-        items = response;
+        // Wenn Backend keine companies/users/languages liefert, nutze Mock-Daten
+        const hasInitData = data.companies && data.users && data.languages;
+        
+        if (!hasInitData) {
+          const mockCompanies = [
+            { company: '1000', company_name: 'Oswald Getränke AG', selected: true },
+            { company: '2000', company_name: 'Garage California GmbH', selected: false }
+          ];
+          const mockUsers = [
+            { user_name: 'wari', display_name: 'Walter Riechsteiner' },
+            { user_name: 'Admin', display_name: 'administrator' }
+          ];
+          const mockLanguages = [
+            { language_id: 1, language_name: 'Deutsch' },
+            { language_id: 2, language_name: 'Französisch' },
+            { language_id: 3, language_name: 'Italienisch' },
+            { language_id: 4, language_name: 'Englisch' }
+          ];
+
+          setCompanies(mockCompanies);
+          setUsers(mockUsers);
+          setLanguages(mockLanguages);
+          setSelectedCompany(mockCompanies[0].company);
+          setSelectedUser(mockUsers[0].user_name);
+          setSelectedLanguage(String(mockLanguages[0].language_id));
+          return;
+        }
+
+        setCompanies(data.companies || []);
+        setUsers(data.users || []);
+        setLanguages(data.languages || []);
+
+        // Wähle vorselektierte Company oder erste aus
+        if (data.companies && data.companies.length > 0) {
+          const selectedCompany = data.companies.find((c: Company) => c.selected);
+          const companyToSelect = selectedCompany ? selectedCompany.company : data.companies[0].company;
+          setSelectedCompany(companyToSelect);
+        }
+        if (data.users && data.users.length > 0) {
+          setSelectedUser(data.users[0].user_name);
+        }
+        if (data.languages && data.languages.length > 0) {
+          setSelectedLanguage(String(data.languages[0].language_id));
+        }
+      } catch (error) {
+        console.error('Fehler beim Laden der Initial-Daten:', error);
+        const mockCompanies = [
+          { company: '1000', company_name: 'Oswald Getränke AG', selected: true },
+          { company: '2000', company_name: 'Garage California GmbH', selected: false }
+        ];
+        const mockUsers = [
+          { user_name: 'wari', display_name: 'Walter Riechsteiner' },
+          { user_name: 'Admin', display_name: 'administrator' }
+        ];
+        const mockLanguages = [
+          { language_id: 1, language_name: 'Deutsch' },
+          { language_id: 2, language_name: 'Französisch' }
+        ];
+
+        setCompanies(mockCompanies);
+        setUsers(mockUsers);
+        setLanguages(mockLanguages);
+
+        setSelectedCompany(mockCompanies[0].company);
+        setSelectedUser(mockUsers[0].user_name);
+        setSelectedLanguage(String(mockLanguages[0].language_id));
       }
-      
-      // Füge uniqueId hinzu falls nicht vorhanden
-      const itemsWithIds = items.map((item: any, index: number) => ({
-        ...item,
-        uniqueId: item.uniqueId || `item_${index}_${Date.now()}`
-      }));
-      
-      setMenuItems(itemsWithIds);
-      
-      // Extrahiere Customer, User, Language falls vorhanden
-      if (response.customer_id) setSelectedCustomer(String(response.customer_id));
-      if (response.user_id) setSelectedUser(String(response.user_id));
-      if (response.language_id) setSelectedLanguage(String(response.language_id));
-      
-    } catch (err) {
-      console.error('❌ Fehler beim Laden der Menü-Daten:', err);
-      setError('Fehler beim Laden der Menü-Daten');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Speichere die gesamte Konfiguration
-  const saveConfiguration = async () => {
-    try {
-      setError(null);
-      
-      const config = {
-        customer_id: selectedCustomer || session?.company,
-        user_id: selectedUser || session?.user_name,
-        language_id: selectedLanguage || session?.language_id,
-        menuItems: menuItems
-      };
-      
-      const response = await apiPost('/menudesigner/save', config);
-      
-      if (response.success) {
-        alert('✅ Menü-Konfiguration erfolgreich gespeichert!');
-        await loadMenuData(); // Neu laden nach dem Speichern
-      } else {
-        throw new Error(response.message || 'Speichern fehlgeschlagen');
-      }
-    } catch (err) {
-      console.error('Fehler beim Speichern:', err);
-      setError('Fehler beim Speichern der Konfiguration');
-    }
-  };
-
-  // Exportiere Konfiguration als JSON
-  const exportConfiguration = () => {
-    const config = {
-      customer_id: selectedCustomer || session?.company,
-      user_id: selectedUser || session?.user_name,
-      language_id: selectedLanguage || session?.language_id,
-      menuItems: menuItems,
-      exportDate: new Date().toISOString()
     };
-    
-    const dataStr = JSON.stringify(config, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `menu-config-${new Date().toISOString().split('T')[0]}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
 
-  // Bearbeite ein Menü-Item
-  const handleEdit = (item: MenuItem) => {
-    setEditingItem({
-      ...item,
-      isNew: false,
-      originallevel1: item.level1,
-      originallevel2: item.level2,
-      originallevel3: item.level3
-    });
-  };
+    loadInitialData();
+  }, []);
 
-  // Erstelle ein neues Menü-Item
-  const handleNew = () => {
-    setEditingItem({
-      level1: 0,
-      level2: 0,
-      level3: 0,
-      menutext: '',
-      menulink: '',
-      isNew: true,
-      uniqueId: `new_${Date.now()}`
-    });
-  };
-
-  // Speichere das bearbeitete Item
-  const handleSaveItem = () => {
-    if (!editingItem) return;
-    
-    if (!editingItem.menutext.trim()) {
-      alert('Bitte geben Sie einen Menü-Text ein');
+  const loadMenuConfiguration = async () => {
+    if (!selectedCompany || !selectedUser || !selectedLanguage) {
+      alert('Bitte alle Filter-Felder ausfüllen');
       return;
     }
-    
-    if (editingItem.isNew) {
-      // Füge neues Item hinzu - entferne die Edit-spezifischen Eigenschaften
-      const newItem: MenuItem = {
-        level1: editingItem.level1,
-        level2: editingItem.level2,
-        level3: editingItem.level3,
-        menutext: editingItem.menutext,
-        menulink: editingItem.menulink,
-        uniqueId: editingItem.uniqueId,
-        source: editingItem.source
-      };
-      setMenuItems([...menuItems, newItem]);
-    } else {
-      // Update bestehendes Item - entferne die Edit-spezifischen Eigenschaften
-      setMenuItems(menuItems.map(item => 
-        item.uniqueId === editingItem.uniqueId
-          ? {
-              level1: editingItem.level1,
-              level2: editingItem.level2,
-              level3: editingItem.level3,
-              menutext: editingItem.menutext,
-              menulink: editingItem.menulink,
-              uniqueId: editingItem.uniqueId,
-              source: editingItem.source
-            }
-          : item
-      ));
+
+    try {
+      const params = new URLSearchParams({
+        company: selectedCompany,
+        user_name: selectedUser,
+        language_id: selectedLanguage
+      });
+
+      const data = await apiGet(`/menudesigner/load?${params}`);
+      setMenuItems(data.menuItems || []);
+      setIsLoaded(true);
+      alert('Menükonfiguration geladen!');
+    } catch (error) {
+      console.error('Fehler beim Laden:', error);
+      alert('Fehler beim Laden der Menükonfiguration');
     }
-    
+  };
+
+  const saveMenuConfiguration = async () => {
+    if (!isLoaded) {
+      alert('Bitte zuerst eine Konfiguration laden');
+      return;
+    }
+
+    const config = {
+      company: selectedCompany,
+      user_name: selectedUser,
+      language_id: selectedLanguage,
+      menuItems: flattenMenuItems(menuItems)
+    };
+
+    try {
+      const result = await apiPost('/menudesigner/save', config);
+      console.log('Gespeicherte Menükonfiguration:', result);
+      alert('Menükonfiguration erfolgreich gespeichert!');
+    } catch (error) {
+      console.error('Fehler beim Speichern:', error);
+      alert('Fehler beim Speichern der Menükonfiguration');
+    }
+  };
+
+  const flattenMenuItems = (items: MenuItem[], result: any[] = []): any[] => {
+    items.forEach(item => {
+      result.push({
+        menu_id: item.menu_id,
+        menu_text: item.menu_text,
+        menu_link: item.menu_link,
+        level1: item.level1,
+        level2: item.level2,
+        level3: item.level3
+      });
+      if (item.children && item.children.length > 0) {
+        flattenMenuItems(item.children, result);
+      }
+    });
+    return result;
+  };
+
+  const getNextLevelNumber = (items: MenuItem[], level: 'level1' | 'level2' | 'level3'): number => {
+    if (items.length === 0) {
+      return level === 'level1' ? 100 : 10;
+    }
+    const maxNum = Math.max(...items.map(item => item[level]));
+    return level === 'level1' ? maxNum + 100 : maxNum + 10;
+  };
+
+  const toggleExpand = (itemId: number, items: MenuItem[] = menuItems): MenuItem[] => {
+    return items.map(item => {
+      if (item.menu_id === itemId) {
+        return { ...item, isExpanded: !item.isExpanded };
+      }
+      if (item.children) {
+        return { ...item, children: toggleExpand(itemId, item.children) };
+      }
+      return item;
+    });
+  };
+
+  const handleToggleExpand = (itemId: number) => {
+    setMenuItems(toggleExpand(itemId));
+  };
+
+  const startEdit = (item: MenuItem) => {
+    setEditingItem({
+      menu_id: item.menu_id,
+      menu_text: item.menu_text,
+      menu_link: item.menu_link
+    });
+  };
+
+  const cancelEdit = () => {
     setEditingItem(null);
   };
 
-  // Lösche ein Menü-Item
-  const handleDelete = (itemToDelete: MenuItem) => {
-    if (!confirm(`Möchten Sie den Menü-Eintrag "${itemToDelete.menutext}" wirklich löschen?`)) {
-      return;
-    }
-    
-    setMenuItems(menuItems.filter(item => item.uniqueId !== itemToDelete.uniqueId));
-  };
+  const saveEdit = () => {
+    if (!editingItem) return;
 
-  // Toggle Gruppe auf/zu
-  const toggleGroup = (groupKey: string) => {
-    const newExpanded = new Set(expandedGroups);
-    if (newExpanded.has(groupKey)) {
-      newExpanded.delete(groupKey);
-    } else {
-      newExpanded.add(groupKey);
-    }
-    setExpandedGroups(newExpanded);
-  };
-
-  // Erstelle hierarchische Menü-Struktur
-  const menuStructure = useMemo(() => {
-    const structure: any[] = [];
-    
-    // Level 1 Items
-    const level1Items = menuItems.filter(item => item.level1 > 0 && item.level2 === 0 && item.level3 === 0);
-    
-    level1Items.forEach(l1 => {
-      const l1Structure: any = {
-        item: l1,
-        children: []
-      };
-      
-      // Level 2 Items für dieses Level 1
-      const level2Items = menuItems.filter(item => 
-        item.level1 === l1.level1 && item.level2 > 0 && item.level3 === 0
-      );
-      
-      level2Items.forEach(l2 => {
-        const l2Structure: any = {
-          item: l2,
-          children: []
-        };
-        
-        // Level 3 Items für dieses Level 2
-        const level3Items = menuItems.filter(item => 
-          item.level1 === l1.level1 && item.level2 === l2.level2 && item.level3 > 0
-        );
-        
-        l2Structure.children = level3Items.map(l3 => ({ item: l3 }));
-        l1Structure.children.push(l2Structure);
+    const updateItem = (items: MenuItem[]): MenuItem[] => {
+      return items.map(item => {
+        if (item.menu_id === editingItem.menu_id) {
+          return {
+            ...item,
+            menu_text: editingItem.menu_text,
+            menu_link: editingItem.menu_link
+          };
+        }
+        if (item.children) {
+          return { ...item, children: updateItem(item.children) };
+        }
+        return item;
       });
-      
-      structure.push(l1Structure);
-    });
-    
-    return structure;
-  }, [menuItems]);
+    };
 
-  const getLevelBadge = (item: MenuItem) => {
-    if (item.level3 > 0) return <span className="badge badge-tertiary">Level 3</span>;
-    if (item.level2 > 0) return <span className="badge badge-secondary">Level 2</span>;
-    return <span className="badge badge-primary">Level 1</span>;
+    setMenuItems(updateItem(menuItems));
+    setEditingItem(null);
+  };
+
+  const addMenuItem = (parentId: number | null = null) => {
+    const newId = Date.now();
+
+    if (parentId === null) {
+      const newItem: MenuItem = {
+        menu_id: newId,
+        menu_text: 'Neuer Menüpunkt',
+        menu_link: '/new-link',
+        level1: getNextLevelNumber(menuItems, 'level1'),
+        level2: 0,
+        level3: 0,
+        children: [],
+        isExpanded: true
+      };
+      setMenuItems([...menuItems, newItem]);
+    } else {
+      const addToParent = (items: MenuItem[]): MenuItem[] => {
+        return items.map(item => {
+          if (item.menu_id === parentId) {
+            const children = item.children || [];
+            const newItem: MenuItem = {
+              menu_id: newId,
+              menu_text: 'Neuer Unterpunkt',
+              menu_link: '/new-sublink',
+              level1: item.level1,
+              level2: item.level2 === 0 ? getNextLevelNumber(children, 'level2') : item.level2,
+              level3: item.level2 !== 0 ? getNextLevelNumber(children, 'level3') : 0,
+              children: []
+            };
+            return {
+              ...item,
+              children: [...children, newItem],
+              isExpanded: true
+            };
+          }
+          if (item.children) {
+            return { ...item, children: addToParent(item.children) };
+          }
+          return item;
+        });
+      };
+
+      setMenuItems(addToParent(menuItems));
+    }
+  };
+
+  const deleteMenuItem = (itemId: number) => {
+    if (!confirm('Möchten Sie diesen Menüpunkt wirklich löschen?')) return;
+
+    const deleteFromItems = (items: MenuItem[]): MenuItem[] => {
+      return items.filter(item => {
+        if (item.menu_id === itemId) return false;
+        if (item.children) {
+          item.children = deleteFromItems(item.children);
+        }
+        return true;
+      });
+    };
+
+    setMenuItems(deleteFromItems(menuItems));
+  };
+
+  const renderMenuItem = (item: MenuItem, depth: number = 0) => {
+    const isEditing = editingItem?.menu_id === item.menu_id;
+    const hasChildren = item.children && item.children.length > 0;
+    const indent = depth * 24;
+
+    return (
+      <div key={item.menu_id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+        <div
+          style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            padding: '0.75rem 1rem',
+            paddingLeft: `${indent + 16}px`,
+            transition: 'background-color 0.15s'
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f9fafb'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+        >
+          <button
+            onClick={() => handleToggleExpand(item.menu_id)}
+            style={{ 
+              marginRight: '0.5rem', 
+              color: '#6b7280',
+              background: 'none',
+              border: 'none',
+              cursor: hasChildren ? 'pointer' : 'default',
+              padding: '0.25rem'
+            }}
+            disabled={!hasChildren}
+          >
+            {hasChildren ? (
+              item.isExpanded ? (
+                <ChevronDown className="w-4 h-4" />
+              ) : (
+                <ChevronRight className="w-4 h-4" />
+              )
+            ) : (
+              <span style={{ display: 'inline-block', width: '1rem', height: '1rem' }} />
+            )}
+          </button>
+
+          <GripVertical style={{ width: '1rem', height: '1rem', color: '#9ca3af', marginRight: '0.5rem', cursor: 'move' }} />
+
+          <div style={{ display: 'flex', gap: '0.25rem', marginRight: '0.75rem' }}>
+            <span className="badge badge-primary" style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem' }}>
+              L1:{item.level1}
+            </span>
+            {item.level2 > 0 && (
+              <span className="badge badge-success" style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem' }}>
+                L2:{item.level2}
+              </span>
+            )}
+            {item.level3 > 0 && (
+              <span className="badge badge-info" style={{ fontSize: '0.75rem', padding: '0.125rem 0.5rem' }}>
+                L3:{item.level3}
+              </span>
+            )}
+          </div>
+
+          {isEditing ? (
+            <div style={{ flex: 1, display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <input
+                type="text"
+                value={editingItem.menu_text}
+                onChange={(e) =>
+                  setEditingItem({ ...editingItem, menu_text: e.target.value })
+                }
+                className="input-field"
+                placeholder="Menütext"
+                style={{ flex: 1 }}
+              />
+              <input
+                type="text"
+                value={editingItem.menu_link}
+                onChange={(e) =>
+                  setEditingItem({ ...editingItem, menu_link: e.target.value })
+                }
+                className="input-field"
+                placeholder="Link"
+                style={{ flex: 1 }}
+              />
+              <button
+                onClick={saveEdit}
+                className="btn btn-success btn-sm"
+              >
+                Speichern
+              </button>
+              <button
+                onClick={cancelEdit}
+                className="btn btn-secondary btn-sm"
+              >
+                Abbrechen
+              </button>
+            </div>
+          ) : (
+            <>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 500, color: '#1f2937' }}>{item.menu_text}</div>
+                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>{item.menu_link}</div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  onClick={() => addMenuItem(item.menu_id)}
+                  className="btn-icon"
+                  title="Unterpunkt hinzufügen"
+                  style={{ color: '#2563eb', background: 'none', border: 'none', padding: '0.25rem', cursor: 'pointer' }}
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => startEdit(item)}
+                  className="btn-icon"
+                  title="Bearbeiten"
+                  style={{ color: '#16a34a', background: 'none', border: 'none', padding: '0.25rem', cursor: 'pointer' }}
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => deleteMenuItem(item.menu_id)}
+                  className="btn-icon"
+                  title="Löschen"
+                  style={{ color: '#dc2626', background: 'none', border: 'none', padding: '0.25rem', cursor: 'pointer' }}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {hasChildren && item.isExpanded && (
+          <div>
+            {item.children!.map(child => renderMenuItem(child, depth + 1))}
+          </div>
+        )}
+      </div>
+    );
   };
 
   return (
-    <BaseLayout
-      title="Menu Designer"
-      showUserInfo={true}
-      showLogout={true}
-    >
-      <div className="container-app">
-        {/* Toolbar */}
-        <div className="card mb-4">
+    <BaseLayout title="Menu Designer">
+      <div className="page-container">
+        <div className="card">
           <div className="card-header">
-            <div className="flex justify-between items-center">
-              <h2 className="text-xl font-semibold">Menü-Verwaltung</h2>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleNew}
-                  className="btn btn-primary btn-sm"
-                  disabled={!!editingItem}
+            <h2>Konfiguration laden</h2>
+          </div>
+          <div className="card-body">
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'flex-end' }}>
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Firma</label>
+                <select
+                  value={selectedCompany}
+                  onChange={(e) => setSelectedCompany(e.target.value)}
+                  className="input-field"
                 >
-                  <Plus className="w-4 h-4 mr-1" />
-                  Neuer Eintrag
-                </button>
-                <button
-                  onClick={saveConfiguration}
-                  className="btn btn-success btn-sm"
-                  disabled={!!editingItem}
+                  <option value="">-- Auswählen --</option>
+                  {companies.map((c) => (
+                    <option key={c.company} value={c.company}>
+                      {c.company_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Benutzer</label>
+                <select
+                  value={selectedUser}
+                  onChange={(e) => setSelectedUser(e.target.value)}
+                  className="input-field"
                 >
-                  <Save className="w-4 h-4 mr-1" />
-                  Speichern
-                </button>
-                <button
-                  onClick={exportConfiguration}
-                  className="btn btn-secondary btn-sm"
+                  <option value="">-- Auswählen --</option>
+                  {users.map((u) => (
+                    <option key={u.user_name} value={u.user_name}>
+                      {u.display_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ flex: 1 }}>
+                <label className="form-label">Sprache</label>
+                <select
+                  value={selectedLanguage}
+                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  className="input-field"
                 >
-                  <Download className="w-4 h-4 mr-1" />
-                  Exportieren
-                </button>
+                  <option value="">-- Auswählen --</option>
+                  {languages.map((l) => (
+                    <option key={l.language_id} value={String(l.language_id)}>
+                      {l.language_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <button
-                  onClick={loadMenuData}
-                  className="btn btn-secondary btn-sm"
+                  onClick={loadMenuConfiguration}
+                  className="btn btn-primary"
                 >
-                  🔄 Aktualisieren
+                  Menü laden
                 </button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Fehlermeldung */}
-        {error && (
-          <div className="alert-error mb-4">
-            {error}
-          </div>
-        )}
-
-        {/* Loading */}
-        {isLoading && (
-          <div className="flex justify-center p-8">
-            <div className="spinner"></div>
-          </div>
-        )}
-
-        {/* Edit Form */}
-        {editingItem && (
-          <div className="card mb-4 border-2 border-blue-500">
-            <div className="card-header bg-blue-50">
-              <h3 className="text-lg font-semibold">
-                {editingItem.isNew ? '🆕 Neuer Menü-Eintrag' : '✏️ Menü-Eintrag bearbeiten'}
-              </h3>
-            </div>
-            <div className="p-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="label">level 1</label>
-                  <input
-                    type="number"
-                    className="input-field"
-                    value={editingItem.level1}
-                    onChange={(e) => setEditingItem({
-                      ...editingItem,
-                      level1: parseInt(e.target.value) || 0
-                    })}
-                    min="0"
-                    max="999"
-                  />
-                </div>
-                <div>
-                  <label className="label">level 2</label>
-                  <input
-                    type="number"
-                    className="input-field"
-                    value={editingItem.level2}
-                    onChange={(e) => setEditingItem({
-                      ...editingItem,
-                      level2: parseInt(e.target.value) || 0
-                    })}
-                    min="0"
-                    max="999"
-                  />
-                </div>
-                <div>
-                  <label className="label">level 3</label>
-                  <input
-                    type="number"
-                    className="input-field"
-                    value={editingItem.level3}
-                    onChange={(e) => setEditingItem({
-                      ...editingItem,
-                      level3: parseInt(e.target.value) || 0
-                    })}
-                    min="0"
-                    max="999"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="label">Menü-Text</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    value={editingItem.menutext}
-                    onChange={(e) => setEditingItem({
-                      ...editingItem,
-                      menutext: e.target.value
-                    })}
-                    placeholder="z.B. Verwaltung"
-                  />
-                </div>
-                <div>
-                  <label className="label">Menü-Link</label>
-                  <input
-                    type="text"
-                    className="input-field"
-                    value={editingItem.menulink}
-                    onChange={(e) => setEditingItem({
-                      ...editingItem,
-                      menulink: e.target.value
-                    })}
-                    placeholder="z.B. admin oder leer"
-                  />
-                </div>
-              </div>
-              <div className="flex gap-2 mt-4">
-                <button onClick={handleSaveItem} className="btn btn-success">
-                  💾 Übernehmen
-                </button>
-                <button onClick={() => setEditingItem(null)} className="btn btn-secondary">
-                  ❌ Abbrechen
+        {isLoaded && (
+          <>
+            <div className="card">
+              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2>Menü-Struktur</h2>
+                <button
+                  onClick={() => addMenuItem(null)}
+                  className="btn btn-success"
+                >
+                  <Plus className="w-4 h-4" style={{ display: 'inline', marginRight: '0.5rem' }} />
+                  Hauptmenüpunkt hinzufügen
                 </button>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Hierarchische Menü-Darstellung */}
-        {!isLoading && (
-          <div className="card">
-            <div className="card-header">
-              <h3 className="text-lg font-semibold">Menü-Struktur (Hierarchisch)</h3>
-            </div>
-            <div className="p-4">
-              {menuStructure.map((level1, idx) => {
-                const isExpanded = expandedGroups.has(`l1_${idx}`);
-                return (
-                  <div key={`l1_${idx}`} className="mb-2">
-                    {/* Level 1 */}
-                    <div className="flex items-center gap-2 p-2 bg-gray-50 hover:bg-gray-100 rounded">
-                      <button
-                        onClick={() => toggleGroup(`l1_${idx}`)}
-                        className="p-1"
-                        disabled={level1.children.length === 0}
-                      >
-                        {level1.children.length > 0 ? (
-                          isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
-                        ) : (
-                          <span className="w-4 h-4 inline-block" />
-                        )}
-                      </button>
-                      <span className="font-medium flex-1">{level1.item.menutext}</span>
-                      {level1.item.menulink && (
-                        <code className="text-xs bg-blue-100 px-2 py-1 rounded">{level1.item.menulink}</code>
-                      )}
-                      {getLevelBadge(level1.item)}
-                      <button
-                        onClick={() => handleEdit(level1.item)}
-                        className="btn btn-primary btn-sm"
-                        disabled={!!editingItem}
-                      >
-                        <Edit className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(level1.item)}
-                        className="btn btn-danger btn-sm"
-                        disabled={!!editingItem}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-                    
-                    {/* Level 2 */}
-                    {isExpanded && level1.children.map((level2: any, idx2: number) => {
-                      const isL2Expanded = expandedGroups.has(`l2_${idx}_${idx2}`);
-                      return (
-                        <div key={`l2_${idx}_${idx2}`} className="ml-8 mt-1">
-                          <div className="flex items-center gap-2 p-2 bg-blue-50 hover:bg-blue-100 rounded">
-                            <button
-                              onClick={() => toggleGroup(`l2_${idx}_${idx2}`)}
-                              className="p-1"
-                              disabled={level2.children.length === 0}
-                            >
-                              {level2.children.length > 0 ? (
-                                isL2Expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />
-                              ) : (
-                                <span className="w-4 h-4 inline-block" />
-                              )}
-                            </button>
-                            <span className="flex-1">{level2.item.menutext}</span>
-                            {level2.item.menulink && (
-                              <code className="text-xs bg-blue-100 px-2 py-1 rounded">{level2.item.menulink}</code>
-                            )}
-                            {getLevelBadge(level2.item)}
-                            <button
-                              onClick={() => handleEdit(level2.item)}
-                              className="btn btn-primary btn-sm"
-                              disabled={!!editingItem}
-                            >
-                              <Edit className="w-3 h-3" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(level2.item)}
-                              className="btn btn-danger btn-sm"
-                              disabled={!!editingItem}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                          
-                          {/* Level 3 */}
-                          {isL2Expanded && level2.children.map((level3: any, idx3: number) => (
-                            <div key={`l3_${idx}_${idx2}_${idx3}`} className="ml-8 mt-1">
-                              <div className="flex items-center gap-2 p-2 bg-green-50 hover:bg-green-100 rounded">
-                                <span className="w-4 h-4 inline-block" />
-                                <span className="flex-1">{level3.item.menutext}</span>
-                                {level3.item.menulink && (
-                                  <code className="text-xs bg-green-100 px-2 py-1 rounded">{level3.item.menulink}</code>
-                                )}
-                                {getLevelBadge(level3.item)}
-                                <button
-                                  onClick={() => handleEdit(level3.item)}
-                                  className="btn btn-primary btn-sm"
-                                  disabled={!!editingItem}
-                                >
-                                  <Edit className="w-3 h-3" />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(level3.item)}
-                                  className="btn btn-danger btn-sm"
-                                  disabled={!!editingItem}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      );
-                    })}
+              <div className="card-body" style={{ padding: 0 }}>
+                {menuItems.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '3rem', color: '#999' }}>
+                    Keine Menüpunkte vorhanden. Klicken Sie auf "Hauptmenüpunkt
+                    hinzufügen" um zu starten.
                   </div>
-                );
-              })}
-              
-              {menuStructure.length === 0 && (
-                <div className="text-center py-8 text-gray-500">
-                  Keine Menü-Einträge vorhanden
-                </div>
-              )}
+                ) : (
+                  <div style={{ border: '1px solid #ddd', borderRadius: '4px', overflow: 'hidden' }}>
+                    {menuItems.map((item) => renderMenuItem(item))}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+
+            <div className="card">
+              <div className="card-body">
+                <button
+                  onClick={saveMenuConfiguration}
+                  className="btn btn-success"
+                >
+                  <Save className="w-4 h-4" style={{ display: 'inline', marginRight: '0.5rem' }} />
+                  Menükonfiguration speichern
+                </button>
+              </div>
+            </div>
+
+            <div className="info-box" style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '1rem' }}>
+              <h3 style={{ fontWeight: 600, color: '#1e40af', marginBottom: '0.5rem' }}>
+                💡 Level-Nummerierung
+              </h3>
+              <ul style={{ fontSize: '0.875rem', color: '#1e40af', lineHeight: '1.75' }}>
+                <li>
+                  <strong>Level 1:</strong> Hauptmenüpunkte (100, 200, 300, ...)
+                </li>
+                <li>
+                  <strong>Level 2:</strong> Erste Unterebene (10, 20, 30, ...)
+                </li>
+                <li>
+                  <strong>Level 3:</strong> Zweite Unterebene (10, 20, 30, ...)
+                </li>
+                <li style={{ marginTop: '0.5rem' }}>
+                  Die Nummern werden automatisch berechnet und dienen zur
+                  Sortierung im Backend.
+                </li>
+              </ul>
+            </div>
+          </>
         )}
-
-        {/* Tabellen-Ansicht */}
-        <div className="card mt-4">
-          <div className="card-header">
-            <h3 className="text-lg font-semibold">Menü-Liste (Tabellarisch)</h3>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left">level 1</th>
-                  <th className="px-4 py-2 text-left">level 2</th>
-                  <th className="px-4 py-2 text-left">level 3</th>
-                  <th className="px-4 py-2 text-left">Menü-Text</th>
-                  <th className="px-4 py-2 text-left">Menü-Link</th>
-                  <th className="px-4 py-2 text-center">Level</th>
-                  <th className="px-4 py-2 text-center">Aktionen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {menuItems.map((item, index) => (
-                  <tr key={item.uniqueId || index} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-2">{item.level1}</td>
-                    <td className="px-4 py-2">{item.level2}</td>
-                    <td className="px-4 py-2">{item.level3}</td>
-                    <td className="px-4 py-2 font-medium">{item.menutext}</td>
-                    <td className="px-4 py-2">
-                      <code className="text-sm bg-gray-100 px-2 py-1 rounded">
-                        {item.menulink || '-'}
-                      </code>
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      {getLevelBadge(item)}
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex gap-2 justify-center">
-                        <button
-                          onClick={() => handleEdit(item)}
-                          className="btn btn-primary btn-sm"
-                          disabled={!!editingItem}
-                        >
-                          <Edit className="w-3 h-3" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item)}
-                          className="btn btn-danger btn-sm"
-                          disabled={!!editingItem}
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Info Box */}
-        <div className="card mt-4">
-          <div className="p-4 bg-blue-50">
-            <h4 className="font-semibold mb-2">ℹ️ Hinweise zur Menü-Struktur:</h4>
-            <ul className="text-sm space-y-1 ml-4">
-              <li>• <strong>level 1:</strong> Hauptmenü-Punkte (oberste Ebene)</li>
-              <li>• <strong>level 2:</strong> Untermenü-Punkte (Dropdown)</li>
-              <li>• <strong>level 3:</strong> Unter-Untermenü-Punkte</li>
-              <li>• <strong>Link:</strong> Route/URL die beim Klick aufgerufen wird</li>
-              <li>• <strong>Automatisches Laden:</strong> Beim Öffnen wird automatisch ?function=init aufgerufen</li>
-              <li>• <strong>Session-Daten:</strong> Customer: {session?.company}, User: {session?.user_name}, Language: {session?.language_id}</li>
-            </ul>
-          </div>
-        </div>
       </div>
     </BaseLayout>
   );

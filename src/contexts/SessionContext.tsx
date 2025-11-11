@@ -1,11 +1,19 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-interface SessionData {
+export interface MenuItem {
+  menu_id: string;
+  menu_text: string;
+  menu_link?: string;
+  children?: MenuItem[];
+}
+
+export interface SessionData {
   session_token?: string;
   company?: string;
   user_name?: string;
   display_name?: string;
   language_id?: number;
+  menu?: MenuItem[];
 }
 
 interface SessionContextType {
@@ -28,15 +36,26 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const user_name = sessionStorage.getItem('X-USER-NAME');
       const display_name = sessionStorage.getItem('X-DISPLAY-NAME');
       const language_id = sessionStorage.getItem('X-LANGUAGE-ID');
+      const menuStr = sessionStorage.getItem('X-MENU');
 
       if (company && user_name) {
-        const sessionData = {
+        const sessionData: SessionData = {
           session_token: session_token || '',
           company: company,
           user_name: user_name,
           display_name: display_name || user_name,
           language_id: language_id ? parseInt(language_id) : undefined
         };
+
+        // Menu aus sessionStorage laden wenn vorhanden
+        if (menuStr) {
+          try {
+            sessionData.menu = JSON.parse(menuStr);
+          } catch (error) {
+            console.error('Fehler beim Parsen des Menüs:', error);
+          }
+        }
+
         setSessionState(sessionData);
       }
     };
@@ -65,6 +84,9 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (data.language_id !== undefined) {
         sessionStorage.setItem('X-LANGUAGE-ID', String(data.language_id));
       }
+      if (data.menu) {
+        sessionStorage.setItem('X-MENU', JSON.stringify(data.menu));
+      }
     } else {
       clearSession();
     }
@@ -78,6 +100,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     sessionStorage.removeItem('X-USER-NAME');
     sessionStorage.removeItem('X-DISPLAY-NAME');
     sessionStorage.removeItem('X-LANGUAGE-ID');
+    sessionStorage.removeItem('X-MENU');
   };
 
   // Prüfen ob Benutzer authentifiziert ist

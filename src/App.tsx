@@ -35,6 +35,10 @@ const AppContent = () => {
         {/* Admin-Bereich */}
         {/* WICHTIG: menudesigner Route OHNE Bindestrich, wie im menu_link! */}
         <Route path="/menudesigner" element={<MenuDesigner />} />
+        
+        {/* Redirect von /menudesigner/config zu /menudesigner */}
+        <Route path="/menudesigner/config" element={<Navigate to="/menudesigner" replace />} />
+        
         <Route path="/users" element={<UserManagement />} />
         
         {/* FormDesigner mit Session (innerhalb des Systems) */}

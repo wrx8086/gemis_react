@@ -1,5 +1,5 @@
-import React from 'react';
-import { LogOut, User } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { LogOut, User, ChevronDown } from 'lucide-react';
 import { useSession } from '../../contexts/SessionContext';
 import { useNavigate } from 'react-router-dom';
 
@@ -11,6 +11,7 @@ interface BaseLayoutProps {
   children: React.ReactNode;
   showUserInfo?: boolean;
   showLogout?: boolean;
+  showNavigation?: boolean;
 }
 
 /**
@@ -27,91 +28,180 @@ const BaseLayout: React.FC<BaseLayoutProps> = ({
   footerRight = '',
   children,
   showUserInfo = false,
-  showLogout = false
+  showLogout = false,
+  showNavigation = false
 }) => {
   const { session, clearSession } = useSession();
   const navigate = useNavigate();
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+
+  // Debug: Zeige Session-Status
+  useEffect(() => {
+    console.log('🔍 BaseLayout Session:', {
+      hasSession: !!session,
+      hasMenu: !!session?.menu,
+      menuLength: session?.menu?.length,
+      showNavigation: showNavigation
+    });
+    if (session?.menu) {
+      console.log('🔍 Menu Items:', session.menu);
+    }
+  }, [session, showNavigation]);
 
   const handleLogout = () => {
     clearSession();
     navigate('/login');
   };
 
+  const handleNavigate = (menuLink?: string) => {
+    if (menuLink) {
+      // Stelle sicher dass Link mit / beginnt
+      let path = menuLink.startsWith('/') ? menuLink : `/${menuLink}`;
+      
+      // Füge function=init hinzu wenn nicht vorhanden
+      if (!path.includes('?')) {
+        path += '?function=init';
+      }
+      
+      navigate(path);
+      setOpenMenu(null);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="layout-wrapper">
       {/* Header */}
-      <header className="bg-white shadow-md">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          {/* Icon Links - Logo */}
+      <header className="layout-header">
+        <div className="header-container">
+          {/* Logo Links */}
           <div 
-            className="flex items-center gap-2 cursor-pointer hover:opacity-80" 
+            className="header-logo" 
             onClick={() => navigate('/dashboard')}
             title="Zur Startseite"
           >
             <img 
               src="../src/assets/images/title_left.png" 
-              alt="Logo" 
-              className="h-8 w-auto"
+              alt="AnalytikData PRIME GmbH" 
             />
           </div>
 
-          {/* Title */}
-          <h1 className="text-2xl font-bold text-gray-800">
-            {title}
-          </h1>
+          {/* Title Mitte */}
+          <div className="header-title-wrapper">
+            <h1 className="header-title">{title}</h1>
+          </div>
 
-          {/* Icon Rechts + User Info */}
-          <div className="flex items-center gap-4">
+          {/* User Info & Actions Rechts */}
+          <div className="header-actions">
             {showUserInfo && session && (
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <User className="w-4 h-4" />
-                <span>{session.display_name}</span>
-                <span className="text-gray-400">|</span>
-                <span>Mandant: {session.company}</span>
+              <div className="header-user-info">
+                <User className="icon-sm" />
+                <span className="header-user-name">{session.display_name}</span>
+                <span>|</span>
+                <span className="header-company">Mandant: {session.company}</span>
               </div>
             )}
             
             {showLogout && (
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm"
+                className="header-logout-btn"
                 title="Abmelden"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="icon-sm" />
                 Abmelden
               </button>
             )}
             
             {!showLogout && (
-              <User className="w-6 h-6 text-blue-600" />
+              <User className="icon-md icon-primary" />
             )}
           </div>
         </div>
       </header>
 
+      {/* Navigation Menu */}
+      {showNavigation && session?.menu && session.menu.length > 0 && (
+        <nav className="layout-navigation">
+          <div className="nav-container">
+            {session.menu.map((mainItem, mainIndex) => {
+              const hasChildren = mainItem.children && mainItem.children.length > 0;
+              
+              return (
+                <div 
+                  key={`main-${mainItem.menu_id}-${mainIndex}`}
+                  className="nav-item"
+                  onMouseEnter={() => setOpenMenu(mainItem.menu_id)}
+                  onMouseLeave={() => setOpenMenu(null)}
+                >
+                  <button 
+                    className={`nav-link ${!hasChildren && mainItem.menu_link ? 'nav-link-clickable' : ''}`}
+                    onClick={() => {
+                      // Nur navigieren wenn keine Kinder vorhanden sind
+                      if (!hasChildren) {
+                        handleNavigate(mainItem.menu_link);
+                      }
+                    }}
+                  >
+                    {mainItem.menu_text}
+                    {hasChildren && (
+                      <ChevronDown className="nav-chevron" />
+                    )}
+                  </button>
+                  
+                  {hasChildren && openMenu === mainItem.menu_id && (
+                    <div className="nav-dropdown">
+                      {mainItem.children!.map((subItem, subIndex) => (
+                        <div key={`sub-${subItem.menu_id}-${subIndex}`}>
+                          {subItem.children && subItem.children.length > 0 ? (
+                            <>
+                              <div className="nav-dropdown-header">
+                                {subItem.menu_text}
+                              </div>
+                              {subItem.children.map((subSubItem, subSubIndex) => (
+                                <button
+                                  key={`subsub-${subSubItem.menu_id}-${subSubIndex}`}
+                                  onClick={() => handleNavigate(subSubItem.menu_link)}
+                                  className={`nav-dropdown-item ${subSubItem.menu_link ? 'nav-dropdown-item-clickable' : ''}`}
+                                >
+                                  {subSubItem.menu_text}
+                                </button>
+                              ))}
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => handleNavigate(subItem.menu_link)}
+                              className={`nav-dropdown-item ${subItem.menu_link ? 'nav-dropdown-item-clickable' : ''}`}
+                            >
+                              {subItem.menu_text}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </nav>
+      )}
+
       {/* Main Content */}
-      <main className="flex-1 flex flex-col items-center justify-start p-6">
-        <div className="w-full max-w-7xl">
-          {children}
-        </div>
+      <main className="layout-content">
+        {children}
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="grid grid-cols-3 gap-4 text-sm text-gray-600">
-            {/* Footer Links */}
-            <div className="text-left">
+      <footer className="layout-footer">
+        <div className="footer-container">
+          <div className="footer-grid">
+            <div className="footer-left">
               {footerLeft}
             </div>
-            
-            {/* Footer Mitte */}
-            <div className="text-center">
+            <div className="footer-center">
               {footerCenter}
             </div>
-            
-            {/* Footer Rechts */}
-            <div className="text-right">
+            <div className="footer-right">
               {footerRight}
             </div>
           </div>

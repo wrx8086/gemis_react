@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSession } from '../../contexts/SessionContext';
 import { Eye, EyeOff } from 'lucide-react';
-import BaseLayout from '../../components/layout/BaseLayout';
 import config from '../../config.json';
 
 interface Company {
@@ -22,7 +21,6 @@ const LoginPage: React.FC = () => {
 
   const { setSession } = useSession();
 
-  // API-URLs aus config
   const apiBaseUrl = `${config.baseUrl}${config.apiPath}`;
 
   useEffect(() => {
@@ -79,6 +77,12 @@ const LoginPage: React.FC = () => {
     setError('');
     setIsLoading(true);
 
+    if (!user_name.trim()) {
+      setError('Bitte Benutzername eingeben');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch(`${apiBaseUrl}/login`, {
         method: 'POST',
@@ -87,33 +91,35 @@ const LoginPage: React.FC = () => {
         },
         credentials: 'include',
         body: JSON.stringify({
-          user_name,
-          password,
+          user_name: user_name,
+          password: password,
           company: selectedCompany
         })
       });
 
       const data = await response.json();
 
-      if (data.success) {
+      if (response.ok && data.success) {
         localStorage.setItem('lastUserName', user_name);
         
-        setSession({
-          session_token: data.session_token || '',
-          company: data.company,
-          user_name: data.user_name,
-          display_name: data.display_name || data.user_name,
-          language_id: data.language_id
-        });
+        // ✅ FIX: Backend liefert session_token, nicht session_id
+        const sessionToken = data.session_token || data.session_id || '';
         
-        setTimeout(() => {
-          window.location.href = '/dashboard';
-        }, 100);
+        // Session-Daten im Context speichern - MIT session_token!
+        setSession({
+          session_token: sessionToken,
+          company: selectedCompany,
+          user_name: user_name,
+          display_name: data.display_name || user_name,
+          language_id: data.language_id || '1'
+        });
+
+        window.location.href = '/dashboard';
       } else {
-        setError(data.message || 'Anmeldung fehlgeschlagen');
+        setError(data.message || 'Login fehlgeschlagen');
       }
     } catch (err) {
-      console.error('Login-Fehler:', err);
+      console.error('Login Fehler:', err);
       setError('Verbindungsfehler. Bitte versuchen Sie es später erneut.');
     } finally {
       setIsLoading(false);
@@ -121,95 +127,108 @@ const LoginPage: React.FC = () => {
   };
 
   return (
-    <BaseLayout 
-      title="GeMIS Anmeldung"
-      footerCenter="© 2024 AnalytikData PRIME GmbH"
-    >
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="w-full max-w-md">
-          <div className="card">
+    <div className="login-container">
+      <div className="login-card-wrapper">
+        <div className="login-card">
+          {/* Logo & Header */}
+          <div className="login-header">
+            <h1 className="login-title">AnalytikData PRIME GmbH</h1>
+            <p className="login-subtitle">GeMIS Anmeldung</p>
+          </div>
+
+          {/* Login Form */}
+          <form onSubmit={handleLogin} className="login-form">
+            {/* Benutzer */}
+            <div className="form-group">
+              <label htmlFor="username" className="label">
+                Benutzer:
+              </label>
+              <input
+                id="username"
+                type="text"
+                value={user_name}
+                onChange={(e) => setUserName(e.target.value)}
+                className="input-field"
+                autoComplete="username"
+                disabled={isLoading}
+              />
+            </div>
+
+            {/* Passwort */}
+            <div className="form-group">
+              <label htmlFor="password" className="label">
+                Passwort:
+              </label>
+              <div className="password-input-wrapper">
+                <input
+                  id="password"
+                  ref={passwordInputRef}
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="input-field password-field"
+                  autoComplete="current-password"
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="password-toggle-btn"
+                  tabIndex={-1}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4" />
+                  ) : (
+                    <Eye className="w-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Firma */}
+            <div className="form-group">
+              <label htmlFor="company" className="label">
+                Firma:
+              </label>
+              <select
+                id="company"
+                value={selectedCompany}
+                onChange={(e) => setSelectedCompany(e.target.value)}
+                className="select-field"
+                disabled={isLoading}
+              >
+                {companies.map((company) => (
+                  <option key={company.company} value={company.company}>
+                    {company.company_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Error Message */}
             {error && (
-              <div className="alert-error">
+              <div className="login-error">
                 {error}
               </div>
             )}
 
-            <form onSubmit={handleLogin} className="space-y-6">
-              {/* Benutzername */}
-              <div className="form-group">
-                <label htmlFor="user_name" className="label">
-                  Benutzer:
-                </label>
-                <input
-                  id="user_name"
-                  name="user_name"
-                  type="text"
-                  autoComplete="username"
-                  value={user_name}
-                  onChange={(e) => setUserName(e.target.value)}
-                  className="input-field"
-                />
-              </div>
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="btn btn-primary btn-full-width"
+            >
+              {isLoading ? 'Anmelden...' : 'Anmelden'}
+            </button>
+          </form>
 
-              {/* Passwort */}
-              <div className="form-group">
-                <label htmlFor="password" className="label">
-                  Passwort:
-                </label>
-                <div className="relative">
-                  <input
-                    id="password"
-                    name="password"
-                    ref={passwordInputRef}
-                    type={showPassword ? 'text' : 'password'}
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="input-field pr-12"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
-                  >
-                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Company */}
-              <div className="form-group">
-                <label htmlFor="company" className="label">
-                  Firma:
-                </label>
-                <select
-                  id="company"
-                  name="company"
-                  value={selectedCompany}
-                  onChange={(e) => setSelectedCompany(e.target.value)}
-                  className="select-field"
-                >
-                  {companies.map((c) => (
-                    <option key={c.company} value={c.company}>
-                      {c.company_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Anmelden Button */}
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="btn btn-secondary w-full"
-              >
-                {isLoading ? 'Wird angemeldet...' : 'Anmelden'}
-              </button>
-            </form>
+          {/* Footer */}
+          <div className="layout-footer">
+            © 2024 AnalytikData PRIME GmbH
           </div>
         </div>
       </div>
-    </BaseLayout>
+    </div>
   );
 };
 
