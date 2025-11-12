@@ -4,6 +4,8 @@ export interface MenuItem {
   menu_id: string;
   menu_text: string;
   menu_link?: string;
+  openMode?: 'simple' | 'new' | 'complex';
+  admin?: boolean;
   children?: MenuItem[];
 }
 

@@ -9,6 +9,7 @@ import Dashboard from './modules/dashboard/Dashboard';
 import GenericPage from './modules/common/GenericPage';
 import MenuDesigner from './modules/admin/MenuDesigner';
 import UserManagement from './modules/admin/UserManagement';
+import TabSystemDemo from './modules/demo/TabSystemDemo';
 
 // Komponente um Session-Getter zu registrieren
 const SessionRegistration = () => {
@@ -31,16 +32,16 @@ const AppContent = () => {
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        
+
         {/* Admin-Bereich */}
         {/* WICHTIG: menudesigner Route OHNE Bindestrich, wie im menu_link! */}
         <Route path="/menudesigner" element={<MenuDesigner />} />
-        
+
         {/* Redirect von /menudesigner/config zu /menudesigner */}
         <Route path="/menudesigner/config" element={<Navigate to="/menudesigner" replace />} />
-        
+
         <Route path="/users" element={<UserManagement />} />
-        
+
         {/* FormDesigner mit Session (innerhalb des Systems) */}
         <Route path="/form-designer" element={<FormDesigner />} />
 
@@ -49,6 +50,9 @@ const AppContent = () => {
 
         {/* Generische Seite für dynamische Menü-Links - MUSS AM ENDE STEHEN! */}
         <Route path="/:page" element={<GenericPage />} />
+
+        {/* SCHNELLTEST - direkt aufrufen */}
+        <Route path="/test-tabs" element={<TabSystemDemo />} />
       </Routes>
     </>
   );
