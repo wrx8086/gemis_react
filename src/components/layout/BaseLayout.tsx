@@ -159,10 +159,15 @@ const BaseLayout: React.FC<BaseLayoutProps> = ({
       {/* Header */}
       <header className="layout-header">
         <div className="header-container">
-          <div className="header-logo">
+          <button 
+            className="header-logo" 
+            onClick={() => navigate('/dashboard')}
+            type="button"
+            aria-label="Zurück zum Dashboard"
+          >
             <img src={logoImage} alt="GeMIS Logo" />
             {/* <span style={{ fontWeight: 'bold', fontSize: '1.25rem' }}>GeMIS</span> */}
-          </div>
+          </button>
           
           <div className="header-title-wrapper">
             <h1 className="header-title">{title}</h1>

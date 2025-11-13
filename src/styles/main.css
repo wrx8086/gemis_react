@@ -181,6 +181,13 @@ body {
   padding: var(--spacing-md);
 }
 
+/* Page Container */
+.page-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--spacing-lg);
+}
+
 /* ============================================================================
    BaseLayout Styles
    ============================================================================ */
@@ -216,6 +223,10 @@ body {
   gap: var(--spacing-sm);
   cursor: pointer;
   transition: opacity var(--transition-base);
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
 }
 
 .header-logo:hover {
@@ -881,8 +892,8 @@ body {
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--spacing-lg);
-  margin-bottom: var(--spacing-lg);
+  gap: 1.2rem;           /* 20% kleiner: war 1.5rem */
+  margin-bottom: 1.2rem; /* 20% kleiner: war 1.5rem */
 }
 
 @media (max-width: 768px) {
@@ -892,7 +903,8 @@ body {
 }
 
 /* Labels */
-.label {
+.label,
+.form-label {
   display: block;
   font-size: var(--font-sm);
   font-weight: var(--font-medium);
@@ -908,7 +920,7 @@ body {
 /* Input Fields */
 .input-field {
   width: 100%;
-  padding: 0.625rem 0.75rem;
+  padding: 0.5rem 0.75rem;  /* 20% niedriger: war 0.625rem */
   font-size: var(--font-base);
   color: var(--color-gray-900);
   background-color: white;
@@ -936,7 +948,7 @@ body {
 /* Select Fields */
 .select-field {
   width: 100%;
-  padding: 0.625rem 0.75rem;
+  padding: 0.5rem 0.75rem;  /* 20% niedriger: war 0.625rem */
   font-size: var(--font-base);
   color: var(--color-gray-900);
   background-color: white;
@@ -961,7 +973,7 @@ body {
 /* Textarea */
 .textarea-field {
   width: 100%;
-  padding: 0.625rem 0.75rem;
+  padding: 0.5rem 0.75rem;  /* 20% niedriger: war 0.625rem */
   font-size: var(--font-base);
   font-family: var(--font-sans);
   color: var(--color-gray-900);
@@ -989,8 +1001,8 @@ body {
 }
 
 .checkbox-input {
-  width: 1rem;
-  height: 1rem;
+  width: 1.25rem;   /* Größer: war 1rem */
+  height: 1.25rem;  /* Größer: war 1rem */
   cursor: pointer;
   accent-color: var(--color-primary);
 }
@@ -999,6 +1011,28 @@ body {
   font-size: var(--font-sm);
   color: var(--color-gray-700);
   cursor: pointer;
+}
+
+/* Checkbox unter Label zentriert (für form-group) */
+.form-group .checkbox {
+  width: 1.25rem;
+  height: 1.25rem;
+  cursor: pointer;
+  accent-color: var(--color-primary);
+  display: block;
+  margin: 0 auto;
+  margin-top: var(--spacing-xs);
+}
+
+/* Wenn form-group eine Checkbox enthält: Label zentrieren */
+.form-group:has(.checkbox) {
+  text-align: center;
+}
+
+.form-group:has(.checkbox) .label {
+  display: block;
+  text-align: center;
+  margin-bottom: var(--spacing-xs);
 }
 
 /* Radio Buttons */
@@ -2691,4 +2725,213 @@ body {
 
 /* ============================================================================
    ENDE - main.css
+   ============================================================================ */
+
+/* ============================================================================
+   FormDesigner Specific Styles
+   ============================================================================ */
+
+/* Designer Container */
+.fd-designer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-xl);
+  margin-top: var(--spacing-lg);
+}
+
+.fd-designer-container {
+  border: 2px solid var(--color-gray-300);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-lg);
+  min-height: 500px;
+  background-color: white;
+}
+
+.fd-designer-container-available {
+  border-color: var(--color-primary);
+  background-color: var(--color-primary-light);
+}
+
+.fd-designer-container-selected {
+  border-color: var(--color-success);
+  background-color: var(--color-success-light);
+}
+
+/* Search Container */
+.fd-search-container {
+  position: relative;
+  margin-bottom: var(--spacing-md);
+}
+
+.fd-search-input {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md) var(--spacing-sm) 2.5rem;
+  border: 1px solid var(--color-gray-300);
+  border-radius: var(--radius-md);
+  font-size: var(--font-sm);
+  transition: all var(--transition-base);
+}
+
+.fd-search-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.fd-search-icon {
+  position: absolute;
+  left: var(--spacing-sm);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-gray-400);
+  pointer-events: none;
+}
+
+/* Field Cards */
+.fd-field-card {
+  padding: var(--spacing-md);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-sm);
+  cursor: move;
+  transition: all var(--transition-base);
+  background-color: white;
+}
+
+.fd-field-card:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.fd-field-card-available {
+  border-color: var(--color-primary);
+  background-color: white;
+}
+
+.fd-field-card-selected {
+  border-color: var(--color-success);
+  background-color: white;
+}
+
+.fd-field-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-xs);
+}
+
+.fd-field-card-content {
+  flex: 1;
+}
+
+.fd-field-name {
+  font-weight: var(--font-semibold);
+  color: var(--color-gray-900);
+  margin-bottom: var(--spacing-xs);
+}
+
+.fd-field-meta {
+  display: flex;
+  gap: var(--spacing-sm);
+  font-size: var(--font-xs);
+  color: var(--color-gray-500);
+  flex-wrap: wrap;
+}
+
+/* Edit Panel */
+.fd-edit-panel {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background-color: var(--color-gray-50);
+  border: 1px solid var(--color-gray-200);
+  border-radius: var(--radius-md);
+}
+
+.fd-edit-panel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.fd-edit-panel-field {
+  margin-bottom: var(--spacing-md);
+}
+
+.fd-edit-panel-hint {
+  font-size: var(--font-xs);
+  color: var(--color-gray-500);
+  margin-top: var(--spacing-xs);
+}
+
+/* Preview Container */
+/* Empty State */
+.fd-empty-state {
+  text-align: center;
+  padding: var(--spacing-3xl);
+  color: var(--color-gray-400);
+  font-size: var(--font-base);
+}
+
+/* Flex Utilities for FormDesigner */
+.fd-flex {
+  display: flex;
+}
+
+.fd-flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.fd-flex-center {
+  display: flex;
+  align-items: center;
+}
+
+.fd-flex-gap-xs {
+  gap: var(--spacing-xs);
+}
+
+.fd-flex-gap-sm {
+  gap: var(--spacing-sm);
+}
+
+.fd-w-full {
+  width: 100%;
+}
+
+/* Icon Utilities */
+.fd-icon-sm {
+  width: 1rem;
+  height: 1rem;
+}
+
+.fd-icon-muted {
+  color: var(--color-gray-400);
+}
+
+/* Label Utilities */
+.fd-mb-0 {
+  margin-bottom: 0 !important;
+}
+
+/* Button Text Style */
+.fd-button-text {
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  transition: all var(--transition-base);
+}
+
+.fd-button-text:hover {
+  background-color: var(--color-primary-light);
+  border-radius: var(--radius-md);
+}
+
+/* ============================================================================
+   ENDE - FormDesigner Specific Styles
    ============================================================================ */

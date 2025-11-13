@@ -3,7 +3,7 @@ import { SessionProvider, useSession } from './contexts/SessionContext';
 import { registerSessionGetter } from './shared/api/apiClient';
 import { useEffect } from 'react';
 import LoginPage from './modules/auth/LoginPage';
-import FormDesigner from './modules/form-designer/FormDesigner';
+import FormDesigner from './modules/admin/FormDesigner';
 import FormDesignerStandalone from './modules/form-designer/FormDesignerStandalone';
 import Dashboard from './modules/dashboard/Dashboard';
 import GenericPage from './modules/common/GenericPage';
@@ -43,7 +43,7 @@ const AppContent = () => {
         <Route path="/users" element={<UserManagement />} />
 
         {/* FormDesigner mit Session (innerhalb des Systems) */}
-        <Route path="/form-designer" element={<FormDesigner />} />
+        <Route path="/formdesigner" element={<FormDesigner />} />
 
         {/* ⭐ STANDALONE FormDesigner OHNE Login/Session */}
         <Route path="/form-designer-standalone" element={<FormDesignerStandalone />} />

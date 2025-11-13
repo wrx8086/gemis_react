@@ -656,7 +656,7 @@ const MenuDesigner: React.FC = () => {
                 </select>
               </div>
 
-              <div className="form-group-btn">
+              <div className="form-group">
                 <label className="form-label invisible">-</label>
                 <button onClick={loadMenuConfiguration} className="btn btn-primary">
                   Menü laden

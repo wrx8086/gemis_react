@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { registerSessionGetter } from '../../shared/api/apiClient';
-import FormDesigner from './FormDesigner';
+import FormDesigner from '../admin/FormDesigner';
 
 /**
  * Standalone FormDesigner Wrapper
