@@ -744,7 +744,6 @@ body {
   background-color: white;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
-  overflow: hidden;
 }
 
 .card-header {
@@ -2565,24 +2564,47 @@ body {
   gap: var(--spacing-sm);
   align-items: center;
   flex: 1;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .menu-item-edit-form .input-field {
-  flex: 1;
-  min-width: 150px;
+  /* Standardwert für menu_text und menu_link */
+  flex: 2 1 200px;
 }
 
-.menu-item-edit-form .input-field:nth-child(3) {
-  flex: 0.8;
-  min-width: 120px;
+/* Level-Felder (3., 4., 5. input-field) - number inputs */
+.menu-item-edit-form input[type="number"]:nth-child(3),
+.menu-item-edit-form input[type="number"]:nth-child(4),
+.menu-item-edit-form input[type="number"]:nth-child(5) {
+  flex: 0 0 65px;
+  width: 65px;
+  min-width: 65px;
+}
+
+/* Entferne Spin-Buttons bei number inputs */
+.menu-item-edit-form input[type="number"]::-webkit-outer-spin-button,
+.menu-item-edit-form input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.menu-item-edit-form input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* OpenMode select (6. element - das select nach den number inputs) */
+.menu-item-edit-form select {
+  flex: 0 0 110px;
+  width: 110px;
+  min-width: 110px;
 }
 
 /* Menu List Container */
 .menu-list {
   border: 1px solid var(--color-gray-200);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow-y: auto;
+  max-height: 600px;
 }
 
 /* Icon Buttons */
@@ -2930,6 +2952,78 @@ body {
 .fd-button-text:hover {
   background-color: var(--color-primary-light);
   border-radius: var(--radius-md);
+}
+
+/* ============================================================================
+   Utility Classes (für dynamische Formulare)
+   ============================================================================ */
+
+/* Labels ohne unteren Abstand (für inline Checkboxen/Radios) */
+.label-inline {
+  margin-bottom: 0 !important;
+}
+
+/* Flex-Container mit Standard-Gap */
+.flex-gap-sm {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+/* Flex-Container mit alignItems */
+.flex-align-center {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+/* Volle Breite */
+.w-full {
+  width: 100%;
+}
+
+/* Flex-Item nimmt verfügbaren Platz */
+.flex-1 {
+  flex: 1;
+}
+
+/* Line Break für Flexbox (Zeilenumbruch erzwingen) */
+.flex-break {
+  flex-basis: 100%;
+  height: 0;
+}
+
+/* Kompakter Button (icon-only) */
+.btn-compact {
+  min-width: auto;
+  padding: 0 1rem;
+}
+
+/* Icon ohne Margin (für icon-only Buttons) */
+.icon-no-margin {
+  margin: 0 !important;
+}
+
+/* Danger-Color für Text */
+.text-danger {
+  color: var(--color-danger);
+}
+
+/* Primary-Color für Text */
+.text-primary {
+  color: var(--color-primary);
+}
+
+/* Scrollbare Tabelle mit max-height */
+.table-scroll {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Subtitle/Description Text */
+.subtitle {
+  font-size: 0.875rem;
+  color: var(--color-gray-600);
+  margin-top: var(--spacing-xs);
 }
 
 /* ============================================================================

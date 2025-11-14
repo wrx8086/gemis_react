@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { GripVertical, X, Save, Download, Search, Trash2 } from 'lucide-react';
 import { apiGet, apiPost } from '../../shared/api/apiClient';
 import BaseLayout from '../../components/layout/BaseLayout';
-import { useSearchParams } from 'react-router-dom';
 
 interface Company {
   company: string;
@@ -32,7 +31,6 @@ interface Field {
   fieldName: string;
   label: string;
   type: string;
-  table: string;
   uniqueId: string;
   maxLength?: number;
   format?: string;
@@ -56,15 +54,6 @@ interface Field {
 }
 
 const FormDesigner: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  
-  // OpenMode aus URL prüfen (für neue Tabs)
-  const openMode = searchParams.get('mode') || 'simple';
-  const showNavigation = false; // FormDesigner immer ohne Navigation
-  
-  console.log('🔍 FormDesigner - openMode:', openMode);
-  console.log('🔍 FormDesigner - showNavigation:', showNavigation);
-  
   const [companies, setCompanies] = useState<Company[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [languages, setLanguages] = useState<Language[]>([]);
@@ -101,12 +90,10 @@ const FormDesigner: React.FC = () => {
       try {
         const data = await apiGet('/formdesigner?function=init');
         
-        console.log('📦 FormDesigner Init Response:', data);
 
         const hasInitData = data.companies && data.users && data.languages;
         
         if (!hasInitData) {
-          console.warn('⚠️ Keine Init-Daten, verwende Mock-Daten');
           const mockCompanies = [
             { company: '1000', company_name: 'Kunde A', selected: true },
             { company: '2000', company_name: 'Kunde B', selected: false }
@@ -134,9 +121,6 @@ const FormDesigner: React.FC = () => {
         setUsers(data.users || []);
         setLanguages(data.languages || []);
         
-        console.log('✅ Companies geladen:', data.companies?.length || 0);
-        console.log('✅ Users geladen:', data.users?.length || 0);
-        console.log('✅ Languages geladen:', data.languages?.length || 0);
 
         if (data.companies && data.companies.length > 0) {
           const selectedCompany = data.companies.find((c: Company) => c.selected);
@@ -150,7 +134,6 @@ const FormDesigner: React.FC = () => {
           setSelectedLanguage(String(data.languages[0].language_id));
         }
       } catch (error) {
-        console.error('Fehler beim Laden der Initial-Daten:', error);
         const mockCompanies = [
           { company: '1000', company_name: 'Kunde A', selected: true },
           { company: '2000', company_name: 'Kunde B', selected: false }
@@ -195,7 +178,6 @@ const FormDesigner: React.FC = () => {
       const data = await apiGet(`/formdesigner?${params.toString()}`);
       const response = data.dsResponse || data;
       
-      console.log('📦 Load Config Response:', response);
       
       let parsedFields = response.fields || [];
       let parsedConfigs = response.existingConfigs || [];
@@ -229,7 +211,6 @@ const FormDesigner: React.FC = () => {
       setIsLoaded(true);
       alert('Konfiguration geladen!');
     } catch (error) {
-      console.error('Fehler beim Laden:', error);
       alert('Fehler beim Laden der Konfiguration');
     }
   };
@@ -254,15 +235,40 @@ const FormDesigner: React.FC = () => {
 
       const data = await apiGet(`/formdesigner?${params.toString()}`);
       
-      console.log('📦 Load Detail Response:', data);
 
       if (data.selectedFields) {
-        setSelectedFields(data.selectedFields);
+        const normalizedFields = data.selectedFields.map((field: Field) => {
+          let widthInChars = field.widthInChars;
+          let width = field.width;
+          
+          if (!widthInChars && !width) {
+            const calculated = calculateWidthFromMaxLength(field.maxLength, field.type);
+            widthInChars = calculated.widthInChars;
+            width = calculated.width;
+          }
+          
+          return {
+            ...field,
+            width,
+            widthInChars,
+            separator: field.separator ?? false,
+            password: field.password ?? false,
+            showInTable: field.showInTable ?? false,
+            keyfield: field.keyfield ?? false,
+            newLine: field.newLine ?? false,
+            required: field.required ?? false,
+            editable: field.editable ?? true,
+            hidden: field.hidden ?? false,
+            showSpinner: field.showSpinner ?? false,
+            placeholder: field.placeholder ?? '',
+            align: field.align ?? 'left'
+          };
+        });
+        setSelectedFields(normalizedFields);
         setFormTitle(data.formTitle || '');
         setFormId(data.formId || '');
       }
     } catch (error) {
-      console.error('Fehler beim Laden der Config:', error);
       alert('Fehler beim Laden der ausgewählten Konfiguration');
     }
   };
@@ -285,7 +291,6 @@ const FormDesigner: React.FC = () => {
 
       await apiGet(`/formdesigner?${params.toString()}`);
       
-      console.log('✅ Konfiguration gelöscht:', configId);
       
       // Config aus Liste entfernen
       setExistingConfigs(existingConfigs.filter(c => c.id !== configId));
@@ -300,7 +305,6 @@ const FormDesigner: React.FC = () => {
       
       alert('Konfiguration erfolgreich gelöscht!');
     } catch (error) {
-      console.error('❌ Fehler beim Löschen:', error);
       alert('Fehler beim Löschen der Konfiguration');
     }
   };
@@ -311,6 +315,44 @@ const FormDesigner: React.FC = () => {
       return;
     }
 
+    const normalizedFields = selectedFields.map(field => {
+      let widthInChars = field.widthInChars;
+      let width = field.width;
+      
+      if (!widthInChars && !width) {
+        const calculated = calculateWidthFromMaxLength(field.maxLength, field.type);
+        widthInChars = calculated.widthInChars;
+        width = calculated.width;
+      }
+      
+      return {
+        id: field.id,
+        fieldName: field.fieldName,
+        label: field.label,
+        type: field.type,
+        uniqueId: field.uniqueId,
+        maxLength: field.maxLength,
+        format: field.format,
+        decimalPlaces: field.decimalPlaces,
+        displayType: field.displayType,
+        inputMode: field.inputMode,
+        showSpinner: field.showSpinner ?? false,
+        editable: field.editable ?? true,
+        hidden: field.hidden ?? false,
+        required: field.required ?? false,
+        placeholder: field.placeholder ?? '',
+        width,
+        widthInChars,
+        source: field.source,
+        newLine: field.newLine ?? false,
+        align: field.align ?? 'left',
+        separator: field.separator ?? false,
+        showInTable: field.showInTable ?? false,
+        keyfield: field.keyfield ?? false,
+        password: field.password ?? false
+      };
+    });
+
     const config = {
       company: selectedCompany,
       user_name: selectedUser,
@@ -319,16 +361,14 @@ const FormDesigner: React.FC = () => {
       config: {
         formTitle,
         formId,
-        selectedFields: selectedFields
+        selectedFields: normalizedFields
       }
     };
 
     try {
-      const result = await apiPost('/formdesigner?function=save', config);
-      console.log('✅ Gespeicherte Konfiguration:', result);
+      await apiPost('/formdesigner?function=save', config);
       alert('Konfiguration erfolgreich gespeichert!');
     } catch (error) {
-      console.error('❌ Fehler beim Speichern:', error);
       alert('Fehler beim Speichern der Konfiguration');
     }
   };
@@ -383,15 +423,24 @@ const FormDesigner: React.FC = () => {
       const newField: Field = {
         ...draggedField,
         uniqueId: `selected_${draggedField.id}_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
-        required: false,
-        placeholder: '',
+        source: 'selected',
+        required: draggedField.required || false,
+        placeholder: draggedField.placeholder || '',
         width: width,
         widthInChars: widthInChars,
-        newLine: false,
+        newLine: draggedField.newLine || false,
+        separator: draggedField.separator || false,
+        showInTable: draggedField.showInTable || false,
+        keyfield: draggedField.keyfield || false,
+        password: draggedField.password || false,
         editable: draggedField.editable !== false,
         hidden: draggedField.hidden || false,
         align: draggedField.align || (draggedField.type === 'integer' || draggedField.type === 'decimal' ? 'right' : 'left'),
-        showSpinner: draggedField.showSpinner || false
+        showSpinner: draggedField.showSpinner || false,
+        format: draggedField.format,
+        displayType: draggedField.displayType,
+        inputMode: draggedField.inputMode,
+        decimalPlaces: draggedField.decimalPlaces
       };
       setSelectedFields([...selectedFields, newField]);
     }
@@ -457,7 +506,7 @@ const FormDesigner: React.FC = () => {
     <BaseLayout
       title="Form Designer"
       showUserInfo={true}
-      showNavigation={showNavigation}
+      showNavigation={false}
     >
       <div className="page-container">
         {/* Filter Bereich */}
@@ -661,9 +710,6 @@ const FormDesigner: React.FC = () => {
                               </div>
                             </div>
                           </div>
-                          <span className="badge badge-blue">
-                            {field.table}
-                          </span>
                         </div>
                       </div>
                     ))
@@ -993,7 +1039,8 @@ const FormDesigner: React.FC = () => {
                     display: 'flex', 
                     flexWrap: 'wrap', 
                     gap: 'var(--spacing-sm)',
-                    alignItems: 'flex-start'
+                    alignItems: 'flex-start',
+                    width: '100%'  /* Wichtig für Prozent-Berechnungen */
                   }}>
                     {selectedFields.filter(f => !f.hidden).map((field, index) => (
                       <React.Fragment key={field.uniqueId}>
@@ -1014,13 +1061,15 @@ const FormDesigner: React.FC = () => {
                         )}
                         <div
                           style={{
-                            width: field.widthInChars
-                              ? `${field.widthInChars}ch`
-                              : field.width
-                                ? `${field.width}%`
+                            flex: field.width || field.widthInChars ? '0 0 auto' : '1 1 auto',
+                            width: field.width
+                              ? `${field.width}%`
+                              : field.widthInChars
+                                ? `${field.widthInChars}ch`
                                 : 'auto',
                             maxWidth: '100%',
-                            minWidth: field.widthInChars ? `${field.widthInChars}ch` : undefined
+                            minWidth: field.width ? undefined : field.widthInChars ? `${field.widthInChars}ch` : '200px',
+                            boxSizing: 'border-box'
                           }}
                           className="form-group"
                         >

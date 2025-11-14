@@ -232,6 +232,13 @@ const MenuDesigner: React.FC = () => {
       children: []
     }));
 
+    // Sortiere Items nach level1, level2, level3
+    itemsWithExpanded.sort((a, b) => {
+      if (a.level1 !== b.level1) return a.level1 - b.level1;
+      if (a.level2 !== b.level2) return a.level2 - b.level2;
+      return a.level3 - b.level3;
+    });
+
     const level1Items = itemsWithExpanded.filter(item => item.level2 === 0 && item.level3 === 0);
     
     level1Items.forEach(l1 => {
@@ -277,8 +284,19 @@ const MenuDesigner: React.FC = () => {
         level3 = (index + 1) * 10;
       }
 
+      // menu_id basiert auf den level-Werten
+      let menuId: number;
+      if (level3 !== 0) {
+        menuId = level3;  // Level3: menu_id = level3
+      } else if (level2 !== 0) {
+        menuId = level2;  // Level2: menu_id = level2
+      } else {
+        menuId = level1;  // Level1: menu_id = level1
+      }
+
       const processedItem: MenuItem = {
         ...item,
+        menu_id: menuId,
         level1,
         level2,
         level3,
@@ -291,7 +309,6 @@ const MenuDesigner: React.FC = () => {
   };
 
   const addMenuItem = (parentLevel1: number | null, parentLevel2: number | null, parentLevel3: number | null) => {
-    const newId = Date.now();
     let newLevel1 = 0;
     let newLevel2 = 0;
     let newLevel3 = 0;
@@ -318,8 +335,18 @@ const MenuDesigner: React.FC = () => {
       newLevel3 = maxLevel3 + 10;
     }
 
+    // menu_id basiert auf den level-Werten
+    let newMenuId: number;
+    if (newLevel3 !== 0) {
+      newMenuId = newLevel3;  // Level3: menu_id = level3
+    } else if (newLevel2 !== 0) {
+      newMenuId = newLevel2;  // Level2: menu_id = level2
+    } else {
+      newMenuId = newLevel1;  // Level1: menu_id = level1
+    }
+
     const newItem: MenuItem = {
-      menu_id: newId,
+      menu_id: newMenuId,
       menu_text: 'Neuer Menüpunkt',
       menu_link: '/new-link',
       level1: newLevel1,
@@ -392,32 +419,114 @@ const MenuDesigner: React.FC = () => {
   const saveEdit = () => {
     if (!editingItem || !editingItemOriginalLevels) return;
 
-    const updateItem = (items: MenuItem[]): MenuItem[] => {
-      return items.map(item => {
-        if (
-          item.level1 === editingItemOriginalLevels.level1 &&
-          item.level2 === editingItemOriginalLevels.level2 &&
-          item.level3 === editingItemOriginalLevels.level3
-        ) {
-          return {
-            ...item,
-            menu_text: editingItem.menu_text,
-            menu_link: editingItem.menu_link,
-            level1: editingItem.level1,
-            level2: editingItem.level2,
-            level3: editingItem.level3,
-            openMode: editingItem.openMode,
-            admin: editingItem.admin
+    // Berechne menu_id basierend auf den level-Werten
+    let newMenuId: number;
+    if (editingItem.level3 !== 0) {
+      newMenuId = editingItem.level3;  // Level3: menu_id = level3
+    } else if (editingItem.level2 !== 0) {
+      newMenuId = editingItem.level2;  // Level2: menu_id = level2
+    } else {
+      newMenuId = editingItem.level1;  // Level1: menu_id = level1
+    }
+
+    // Speichere die neuen Level-Werte für Auto-Expand
+    const newLevels = {
+      level1: editingItem.level1,
+      level2: editingItem.level2,
+      level3: editingItem.level3
+    };
+
+    // Funktion um die komplette Hierarchie in ein flaches Array zu konvertieren
+    const flattenHierarchy = (items: MenuItem[]): MenuItem[] => {
+      const result: MenuItem[] = [];
+      
+      const flatten = (itemList: MenuItem[]) => {
+        itemList.forEach(item => {
+          // Kopiere Item ohne children
+          const flatItem: MenuItem = {
+            menu_id: item.menu_id,
+            menu_text: item.menu_text,
+            menu_link: item.menu_link,
+            level1: item.level1,
+            level2: item.level2,
+            level3: item.level3,
+            openMode: item.openMode,
+            admin: item.admin,
+            isExpanded: false
           };
+          
+          // Wenn dies das zu editierende Item ist, aktualisiere die Werte
+          if (
+            item.level1 === editingItemOriginalLevels.level1 &&
+            item.level2 === editingItemOriginalLevels.level2 &&
+            item.level3 === editingItemOriginalLevels.level3
+          ) {
+            flatItem.menu_id = newMenuId;
+            flatItem.menu_text = editingItem.menu_text;
+            flatItem.menu_link = editingItem.menu_link;
+            flatItem.level1 = editingItem.level1;
+            flatItem.level2 = editingItem.level2;
+            flatItem.level3 = editingItem.level3;
+            flatItem.openMode = editingItem.openMode;
+            flatItem.admin = editingItem.admin;
+          }
+          
+          result.push(flatItem);
+          
+          // Rekursiv children bearbeiten
+          if (item.children && item.children.length > 0) {
+            flatten(item.children);
+          }
+        });
+      };
+      
+      flatten(items);
+      return result;
+    };
+
+    // Funktion um Parents zu expandieren
+    const expandParents = (items: MenuItem[], targetLevels: { level1: number; level2: number; level3: number }): MenuItem[] => {
+      return items.map(item => {
+        // Ist dies ein Parent des editierten Items?
+        let shouldExpand = false;
+        
+        // Level1 Item: expandieren wenn level1 übereinstimmt und es Level2/Level3 children gibt
+        if (item.level1 === targetLevels.level1 && item.level2 === 0 && item.level3 === 0) {
+          if (targetLevels.level2 !== 0 || targetLevels.level3 !== 0) {
+            shouldExpand = true;
+          }
         }
+        
+        // Level2 Item: expandieren wenn level1 und level2 übereinstimmen und es Level3 children gibt
+        if (item.level1 === targetLevels.level1 && item.level2 === targetLevels.level2 && item.level3 === 0) {
+          if (targetLevels.level3 !== 0) {
+            shouldExpand = true;
+          }
+        }
+        
+        const updatedItem = {
+          ...item,
+          isExpanded: shouldExpand || item.isExpanded
+        };
+        
         if (item.children) {
-          return { ...item, children: updateItem(item.children) };
+          updatedItem.children = expandParents(item.children, targetLevels);
         }
-        return item;
+        
+        return updatedItem;
       });
     };
 
-    setMenuItems(updateItem(menuItems));
+    // 1. Flache die gesamte Hierarchie und aktualisiere das Item
+    const flatItems = flattenHierarchy(menuItems);
+    
+    // 2. Baue Hierarchie komplett neu auf basierend auf den Level-Werten
+    const rebuiltHierarchy = buildHierarchy(flatItems);
+    
+    // 3. Expandiere Parents des editierten Items
+    const hierarchyWithExpandedParents = expandParents(rebuiltHierarchy, newLevels);
+    
+    setMenuItems(hierarchyWithExpandedParents);
     setEditingItem(null);
     setEditingItemOriginalLevels(null);
   };
@@ -457,9 +566,9 @@ const MenuDesigner: React.FC = () => {
     return (item: MenuItem, depth: number = 0) => {
       const hasChildren = item.children && item.children.length > 0;
       const isEditing = editingItem?.menu_id === item.menu_id &&
-                       editingItem?.level1 === item.level1 &&
-                       editingItem?.level2 === item.level2 &&
-                       editingItem?.level3 === item.level3;
+                       editingItemOriginalLevels?.level1 === item.level1 &&
+                       editingItemOriginalLevels?.level2 === item.level2 &&
+                       editingItemOriginalLevels?.level3 === item.level3;
 
       let levelClass = 'menu-item-level1';
       if (depth === 1) levelClass = 'menu-item-level2';
@@ -507,6 +616,42 @@ const MenuDesigner: React.FC = () => {
                   className="input-field"
                   placeholder="Link"
                 />
+                <input
+                  type="number"
+                  value={editingItem.level1}
+                  onChange={(e) =>
+                    setEditingItem({
+                      ...editingItem,
+                      level1: parseInt(e.target.value) || 0
+                    })
+                  }
+                  className="input-field"
+                  placeholder="L1"
+                />
+                <input
+                  type="number"
+                  value={editingItem.level2}
+                  onChange={(e) =>
+                    setEditingItem({
+                      ...editingItem,
+                      level2: parseInt(e.target.value) || 0
+                    })
+                  }
+                  className="input-field"
+                  placeholder="L2"
+                />
+                <input
+                  type="number"
+                  value={editingItem.level3}
+                  onChange={(e) =>
+                    setEditingItem({
+                      ...editingItem,
+                      level3: parseInt(e.target.value) || 0
+                    })
+                  }
+                  className="input-field"
+                  placeholder="L3"
+                />
                 <select
                   value={editingItem.openMode}
                   onChange={(e) =>
@@ -544,7 +689,12 @@ const MenuDesigner: React.FC = () => {
             ) : (
               <>
                 <div className="menu-item-content">
-                  <div className="menu-item-title">{item.menu_text}</div>
+                  <div className="menu-item-title">
+                    <span className="text-muted text-xs" style={{ marginRight: '0.5rem' }}>
+                      ID:{item.menu_id} | L1:{item.level1} L2:{item.level2} L3:{item.level3}
+                    </span>
+                    {item.menu_text}
+                  </div>
                   <div className="menu-item-link">{item.menu_link}</div>
                 </div>
 
@@ -597,7 +747,7 @@ const MenuDesigner: React.FC = () => {
         </div>
       );
     };
-  }, [menuItems, editingItem]);
+  }, [menuItems, editingItem, editingItemOriginalLevels]);
 
   return (
     <BaseLayout title="Menu Designer" showNavigation={false}>

@@ -9,6 +9,7 @@ import Dashboard from './modules/dashboard/Dashboard';
 import GenericPage from './modules/common/GenericPage';
 import MenuDesigner from './modules/admin/MenuDesigner';
 import UserManagement from './modules/admin/UserManagement';
+import FormProgram from './modules/admin/FormProgram';
 import TabSystemDemo from './modules/demo/TabSystemDemo';
 
 // Komponente um Session-Getter zu registrieren
@@ -47,6 +48,9 @@ const AppContent = () => {
 
         {/* ⭐ STANDALONE FormDesigner OHNE Login/Session */}
         <Route path="/form-designer-standalone" element={<FormDesignerStandalone />} />
+
+        {/* Dynamic Form Program - CRUD basierend auf Form-Definition */}
+        <Route path="/formprogram" element={<FormProgram />} />
 
         {/* Generische Seite für dynamische Menü-Links - MUSS AM ENDE STEHEN! */}
         <Route path="/:page" element={<GenericPage />} />
