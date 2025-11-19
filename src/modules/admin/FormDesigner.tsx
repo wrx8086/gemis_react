@@ -804,6 +804,9 @@ const FormDesigner: React.FC = () => {
                                 onChange={(e) => updateFieldSettings(field.uniqueId, { label: e.target.value })}
                                 className="input-field"
                               />
+                              <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px' }}>
+                                {field.fieldName}
+                              </div>
                             </div>
 
                             <div className="fd-edit-panel-field">

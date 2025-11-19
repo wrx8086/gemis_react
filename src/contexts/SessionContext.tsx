@@ -16,6 +16,19 @@ export interface SessionData {
   display_name?: string;
   language_id?: number;
   menu?: MenuItem[];
+  labels?: {
+    btn_new: string;
+    btn_edit: string;
+    btn_copy: string;
+    btn_delete: string;
+    btn_save: string;
+    btn_cancel: string;
+    btn_first: string;
+    btn_previous: string;
+    btn_next: string;
+    btn_last: string;
+    form_load: string;
+  };
 }
 
 interface SessionContextType {
@@ -39,6 +52,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const display_name = sessionStorage.getItem('X-DISPLAY-NAME');
       const language_id = sessionStorage.getItem('X-LANGUAGE-ID');
       const menuStr = sessionStorage.getItem('X-MENU');
+      const labelsStr = sessionStorage.getItem('X-LABELS');
 
       if (company && user_name) {
         const sessionData: SessionData = {
@@ -55,6 +69,15 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
             sessionData.menu = JSON.parse(menuStr);
           } catch (error) {
             console.error('Fehler beim Parsen des Menüs:', error);
+          }
+        }
+
+        // Labels aus sessionStorage laden wenn vorhanden
+        if (labelsStr) {
+          try {
+            sessionData.labels = JSON.parse(labelsStr);
+          } catch (error) {
+            console.error('Fehler beim Parsen der Labels:', error);
           }
         }
 
@@ -89,6 +112,9 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (data.menu) {
         sessionStorage.setItem('X-MENU', JSON.stringify(data.menu));
       }
+      if (data.labels) {
+        sessionStorage.setItem('X-LABELS', JSON.stringify(data.labels));
+      }
     } else {
       clearSession();
     }
@@ -103,6 +129,7 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     sessionStorage.removeItem('X-DISPLAY-NAME');
     sessionStorage.removeItem('X-LANGUAGE-ID');
     sessionStorage.removeItem('X-MENU');
+    sessionStorage.removeItem('X-LABELS');
   };
 
   // Prüfen ob Benutzer authentifiziert ist

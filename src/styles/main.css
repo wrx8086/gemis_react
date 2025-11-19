@@ -806,6 +806,9 @@ body {
 .table thead {
   background-color: var(--color-gray-100);
   border-bottom: 2px solid var(--color-gray-300);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .table th {
@@ -814,6 +817,7 @@ body {
   font-weight: var(--font-semibold);
   color: var(--color-gray-700);
   white-space: nowrap;
+  background-color: var(--color-gray-100);
 }
 
 .table td {
@@ -3024,6 +3028,42 @@ body {
   font-size: 0.875rem;
   color: var(--color-gray-600);
   margin-top: var(--spacing-xs);
+}
+
+/* Code Block für generierten Code */
+.code-block {
+  background: var(--color-gray-100);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  overflow: auto;
+  max-height: 400px;
+  font-size: 0.75rem;
+  font-family: 'Courier New', Courier, monospace;
+  line-height: 1.5;
+  border: 1px solid var(--color-gray-300);
+}
+
+.code-block code {
+  font-family: inherit;
+  color: var(--color-gray-800);
+}
+
+/* Field Indicators */
+.required-indicator {
+  color: var(--color-danger);
+  margin-left: 2px;
+}
+
+.keyfield-indicator {
+  color: var(--color-info);
+  margin-left: var(--spacing-xs);
+  font-size: var(--font-xs);
+}
+
+.readonly-indicator {
+  color: var(--color-gray-500);
+  margin-left: var(--spacing-xs);
+  font-size: var(--font-sm);
 }
 
 /* ============================================================================

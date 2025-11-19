@@ -11,6 +11,8 @@ import MenuDesigner from './modules/admin/MenuDesigner';
 import UserManagement from './modules/admin/UserManagement';
 import FormProgram from './modules/admin/FormProgram';
 import TabSystemDemo from './modules/demo/TabSystemDemo';
+import ProgramGenerator from './modules/admin/ProgramGenerator';
+import DynamicProgramLoader from './modules/admin/DynamicProgramLoader';
 
 // Komponente um Session-Getter zu registrieren
 const SessionRegistration = () => {
@@ -41,6 +43,11 @@ const AppContent = () => {
         {/* Redirect von /menudesigner/config zu /menudesigner */}
         <Route path="/menudesigner/config" element={<Navigate to="/menudesigner" replace />} />
 
+        <Route path="/program-generator" element={<ProgramGenerator />} />
+        
+        {/* Dynamic Programs - Query Parameter Version */}
+        <Route path="/dynamic" element={<DynamicProgramLoader />} />
+
         <Route path="/users" element={<UserManagement />} />
 
         {/* FormDesigner mit Session (innerhalb des Systems) */}
@@ -57,6 +64,9 @@ const AppContent = () => {
 
         {/* SCHNELLTEST - direkt aufrufen */}
         <Route path="/test-tabs" element={<TabSystemDemo />} />
+
+        {/* Fallback */}
+        <Route path="*" element={<Navigate to="/dashboard" />} />
       </Routes>
     </>
   );

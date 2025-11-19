@@ -111,7 +111,8 @@ const LoginPage: React.FC = () => {
           company: selectedCompany,
           user_name: user_name,
           display_name: data.display_name || user_name,
-          language_id: data.language_id || '1'
+          language_id: data.language_id || '1',
+          labels: data.labels
         });
 
         window.location.href = '/dashboard';

@@ -31,10 +31,6 @@ const BaseLayout: React.FC<BaseLayoutProps> = ({
 
   const menuItems = session?.menu || [];
 
-  // Debug: Menu-Status ausgeben
-  console.log('🔍 BaseLayout - menuItems:', menuItems.length, 'Items');
-  console.log('🔍 BaseLayout - session:', session);
-
   const handleLogout = () => {
     clearSession();
     navigate('/login');

@@ -2,10 +2,12 @@ import React, { useState, useEffect, useRef, type KeyboardEvent } from 'react';
 import {
   Save, Plus, Copy, Trash2, X,
   ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight,
-  Edit2, AlertCircle
+  Edit2, AlertCircle, ArrowUp, ArrowDown, Search, Code
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../../shared/api/apiClient';
 import BaseLayout from '../../components/layout/BaseLayout';
+import { useSession } from '../../contexts/SessionContext';
+import { useNavigate } from 'react-router-dom';
 
 interface Company {
   company: string;
@@ -69,9 +71,26 @@ interface SelectOptions {
   [fieldName: string]: SelectOption[];
 }
 
+interface Labels {
+  btn_new: string;
+  btn_edit: string;
+  btn_copy: string;
+  btn_delete: string;
+  btn_save: string;
+  btn_cancel: string;
+  btn_first: string;
+  btn_previous: string;
+  btn_next: string;
+  btn_last: string;
+  form_load: string;
+}
+
 type EditMode = 'view' | 'add' | 'update' | 'copy' | 'delete';
 
 const FormProgram: React.FC = () => {
+  const { session } = useSession();
+  const navigate = useNavigate();
+  
   const [companies, setCompanies] = useState<Company[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [languages, setLanguages] = useState<Language[]>([]);
@@ -82,7 +101,23 @@ const FormProgram: React.FC = () => {
   const [formId, setFormId] = useState<string>('');
 
   const [formConfig, setFormConfig] = useState<FormConfig | null>(null);
+  const [selectOptionsFix, setSelectOptionsFix] = useState<SelectOptions>({});
   const [selectOptions, setSelectOptions] = useState<SelectOptions>({});
+  
+  const labels: Labels = session?.labels || {
+    btn_new: 'Neu',
+    btn_edit: 'Bearbeiten',
+    btn_copy: 'Kopieren',
+    btn_delete: 'Löschen',
+    btn_save: 'Speichern',
+    btn_cancel: 'Abbrechen',
+    btn_first: 'Erster Datensatz',
+    btn_previous: 'Vorheriger Datensatz',
+    btn_next: 'Nächster Datensatz',
+    btn_last: 'Letzter Datensatz',
+    form_load: 'Formular laden'
+  };
+  
   const [records, setRecords] = useState<RecordData[]>([]);
   const [currentIndex, setCurrentIndex] = useState<number>(0);
   const [currentRecord, setCurrentRecord] = useState<RecordData>({});
@@ -91,6 +126,14 @@ const FormProgram: React.FC = () => {
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [isDirty, setIsDirty] = useState<boolean>(false);
+  
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [columnFilters, setColumnFilters] = useState<{ [key: string]: string }>({});
+  
+  const [searchExpanded, setSearchExpanded] = useState<boolean>(false);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -126,20 +169,15 @@ const FormProgram: React.FC = () => {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        const data = await apiGet('/formdesigner?function=init');
+        const data = await apiGet('/formprogram?function=init');
 
         const companies = data.companies || data.dsResponse?.companies || [];
         const users = data.users || data.dsResponse?.users || [];
         const languages = data.languages || data.dsResponse?.languages || [];
 
-
         setCompanies(companies);
         setUsers(users);
         setLanguages(languages);
-
-        if (data.selectOptions) {
-          setSelectOptions(data.selectOptions);
-        }
 
         if (companies.length > 0) {
           const selectedComp = companies.find((c: Company) => c.selected);
@@ -156,6 +194,7 @@ const FormProgram: React.FC = () => {
 
         setIsLoading(false);
       } catch (err) {
+        console.error('Init Error:', err);
         setIsLoading(false);
       }
     };
@@ -211,14 +250,35 @@ const FormProgram: React.FC = () => {
         selectedFields: normalizedFields
       };
 
+      if (data.selectOptionsFix) {
+        setSelectOptionsFix(data.selectOptionsFix);
+      }
+
       if (data.selectOptions) {
-        setSelectOptions(prev => ({ ...prev, ...data.selectOptions }));
+        setSelectOptions(data.selectOptions);
       }
 
       setFormConfig(config);
       setIsLoaded(true);
 
-      await loadRecords(config);
+      // Process records from same response (Variante 2: 1 Call)
+      if (data.records && Array.isArray(data.records)) {
+        setRecords(data.records);
+        if (data.records.length > 0) {
+          setCurrentRecord(data.records[0]);
+          setCurrentIndex(0);
+        }
+      } else if (data.dsResponse && Array.isArray(data.dsResponse.records)) {
+        setRecords(data.dsResponse.records);
+        if (data.dsResponse.records.length > 0) {
+          setCurrentRecord(data.dsResponse.records[0]);
+          setCurrentIndex(0);
+        }
+      } else {
+        setRecords([]);
+        setCurrentRecord({});
+        setCurrentIndex(0);
+      }
 
       setIsLoading(false);
     } catch (err) {
@@ -227,41 +287,14 @@ const FormProgram: React.FC = () => {
     }
   };
 
-  const loadRecords = async (config: FormConfig) => {
-    try {
-      const tables = Array.from(new Set(config.selectedFields.map(f => getTableFromFieldName(f.fieldName)).filter(Boolean)));
-      const tableName = tables[0];
-
-      if (!tableName) {
-        return;
-      }
-
-      const params = new URLSearchParams({
-        function: 'read',
-        table: tableName,
-        company: selectedCompany,
-        user: selectedUser,
-        language_id: selectedLanguage
-      });
-      const data = await apiGet('/formprogram', params);
-
-      if (data.dsResponse && Array.isArray(data.dsResponse.records)) {
-        setRecords(data.dsResponse.records);
-        if (data.dsResponse.records.length > 0) {
-          setCurrentRecord(data.dsResponse.records[0]);
-          setCurrentIndex(0);
-        }
-      }
-    } catch (err) {
-    }
-  };
-
   const handleAdd = () => {
     if (isDirty && !confirm('Änderungen verwerfen?')) return;
 
     const emptyRecord: RecordData = {};
     formConfig?.selectedFields.forEach(field => {
-      if (field.type === 'logical' || field.type === 'checkbox') {
+      if (field.type === 'select') {
+        emptyRecord[field.fieldName] = currentRecord[field.fieldName] || '';
+      } else if (field.type === 'logical' || field.type === 'checkbox') {
         emptyRecord[field.fieldName] = false;
       } else if (field.type === 'integer' || field.type === 'decimal') {
         emptyRecord[field.fieldName] = 0;
@@ -273,26 +306,36 @@ const FormProgram: React.FC = () => {
     setCurrentRecord(emptyRecord);
     setEditMode('add');
     setIsDirty(false);
+    
+    setTimeout(() => {
+      const firstInput = formRef.current?.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), textarea:not([disabled])');
+      firstInput?.focus();
+    }, 50);
   };
 
   const handleUpdate = () => {
     if (editMode !== 'view') return;
     setEditMode('update');
+    
+    setTimeout(() => {
+      const firstInput = formRef.current?.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), textarea:not([disabled])');
+      firstInput?.focus();
+    }, 50);
   };
 
   const handleCopy = () => {
     if (isDirty && !confirm('Änderungen verwerfen?')) return;
 
     const copiedRecord = { ...currentRecord };
-    formConfig?.selectedFields.forEach(field => {
-      if (field.keyfield) {
-        copiedRecord[field.fieldName] = '';
-      }
-    });
 
     setCurrentRecord(copiedRecord);
-    setEditMode('copy');
+    setEditMode('add');
     setIsDirty(false);
+    
+    setTimeout(() => {
+      const firstInput = formRef.current?.querySelector<HTMLElement>('input:not([disabled]), select:not([disabled]), textarea:not([disabled])');
+      firstInput?.focus();
+    }, 50);
   };
 
   const handleDelete = async () => {
@@ -309,7 +352,7 @@ const FormProgram: React.FC = () => {
       await apiDelete(`/formprogram?table=${tableName}&company=${selectedCompany}&user=${selectedUser}&language_id=${selectedLanguage}&${keyParams}`);
 
       alert('Datensatz erfolgreich gelöscht');
-      await loadRecords(formConfig!);
+      await loadFormConfiguration();
 
       if (records.length > 1) {
         setCurrentIndex(0);
@@ -344,7 +387,7 @@ const FormProgram: React.FC = () => {
         alert('Datensatz erfolgreich aktualisiert');
       }
 
-      await loadRecords(formConfig!);
+      await loadFormConfiguration();
       setEditMode('view');
       setIsDirty(false);
     } catch (err) {
@@ -405,12 +448,21 @@ const FormProgram: React.FC = () => {
     setIsDirty(false);
   };
 
-  const handleRowClick = (record: RecordData, index: number) => {
+  const handleRowClick = (record: RecordData) => {
     if (editMode !== 'view') return;
     if (isDirty && !confirm('Änderungen verwerfen?')) return;
-    setCurrentIndex(index);
-    setCurrentRecord(record);
-    setIsDirty(false);
+    
+    const originalIndex = records.findIndex(r => {
+      const keyFields = formConfig?.selectedFields.filter(f => f.keyfield) || [];
+      if (keyFields.length === 0) return r === record;
+      return keyFields.every(kf => r[kf.fieldName] === record[kf.fieldName]);
+    });
+    
+    if (originalIndex !== -1) {
+      setCurrentIndex(originalIndex);
+      setCurrentRecord(record);
+      setIsDirty(false);
+    }
   };
 
   const handleFieldChange = (fieldName: string, value: any) => {
@@ -435,15 +487,135 @@ const FormProgram: React.FC = () => {
       );
 
       const currentIndex = focusableElements.indexOf(e.currentTarget as HTMLElement);
-      if (currentIndex > -1 && currentIndex < focusableElements.length - 1) {
-        focusableElements[currentIndex + 1].focus();
+      if (currentIndex > -1) {
+        if (currentIndex < focusableElements.length - 1) {
+          focusableElements[currentIndex + 1].focus();
+        } else {
+          if (editMode !== 'view' && editMode !== 'delete') {
+            handleSave();
+          } else {
+            focusableElements[0].focus();
+          }
+        }
       }
+    }
+  };
+
+  const handleSort = (fieldName: string) => {
+    if (sortField === fieldName) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(fieldName);
+      setSortDirection('asc');
+    }
+  };
+
+  const handleFilterChange = (fieldName: string, value: string) => {
+    setColumnFilters(prev => ({
+      ...prev,
+      [fieldName]: value
+    }));
+  };
+
+  const getFilteredAndSortedRecords = () => {
+    let filtered = [...records];
+
+    Object.keys(columnFilters).forEach(fieldName => {
+      const filterValue = columnFilters[fieldName].toLowerCase();
+      if (filterValue) {
+        filtered = filtered.filter(record => {
+          const value = String(record[fieldName] || '').toLowerCase();
+          return value.includes(filterValue);
+        });
+      }
+    });
+
+    if (sortField) {
+      filtered.sort((a, b) => {
+        const aVal = a[sortField] ?? '';
+        const bVal = b[sortField] ?? '';
+        
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        
+        const aStr = String(aVal);
+        const bStr = String(bVal);
+        return sortDirection === 'asc' 
+          ? aStr.localeCompare(bStr) 
+          : bStr.localeCompare(aStr);
+      });
+    }
+
+    return filtered;
+  };
+
+  const handleSearchToggle = () => {
+    if (searchExpanded) {
+      setSearchExpanded(false);
+      setSearchTerm('');
+    } else {
+      setSearchExpanded(true);
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
+  };
+
+  const handleSearchSubmit = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    
+    if (!searchTerm.trim()) return;
+
+    try {
+      setIsLoading(true);
+      
+      const tables = Array.from(new Set(formConfig!.selectedFields.map(f => getTableFromFieldName(f.fieldName)).filter(Boolean)));
+      const tableName = tables[0];
+
+      const params = new URLSearchParams({
+        function: 'selection',
+        table: tableName,
+        company: selectedCompany,
+        user: selectedUser,
+        language_id: selectedLanguage,
+        search: searchTerm
+      });
+
+      const data = await apiGet('/formprogram', params);
+
+      if (data.records && Array.isArray(data.records)) {
+        setRecords(data.records);
+        if (data.records.length > 0) {
+          setCurrentRecord(data.records[0]);
+          setCurrentIndex(0);
+        } else {
+          setCurrentRecord({});
+          setCurrentIndex(0);
+        }
+      } else if (data.dsResponse && Array.isArray(data.dsResponse.records)) {
+        setRecords(data.dsResponse.records);
+        if (data.dsResponse.records.length > 0) {
+          setCurrentRecord(data.dsResponse.records[0]);
+          setCurrentIndex(0);
+        } else {
+          setCurrentRecord({});
+          setCurrentIndex(0);
+        }
+      }
+
+      setIsLoading(false);
+    } catch (err) {
+      console.error('Search Error:', err);
+      setIsLoading(false);
     }
   };
 
   const renderField = (field: Field) => {
     const value = currentRecord[field.fieldName] ?? '';
-    const isDisabled = editMode === 'view' || !field.editable;
+    const isDisabled = 
+      editMode === 'view' || 
+      editMode === 'delete' || 
+      !field.editable || 
+      (editMode === 'update' && field.keyfield);
     const inputClassName = 'input-field';
 
     if (field.type === 'textarea') {
@@ -469,6 +641,7 @@ const FormProgram: React.FC = () => {
           name={field.fieldName}
           checked={!!value}
           onChange={(e) => handleFieldChange(field.fieldName, e.target.checked)}
+          onKeyDown={handleKeyDown}
           disabled={isDisabled}
           className="checkbox"
         />
@@ -476,7 +649,7 @@ const FormProgram: React.FC = () => {
     }
 
     if (field.type === 'select') {
-      const options = selectOptions[field.fieldName] || [];
+      const options = selectOptionsFix[field.fieldName] || selectOptions[field.fieldName] || [];
       return (
         <select
           name={field.fieldName}
@@ -594,6 +767,7 @@ const FormProgram: React.FC = () => {
         maxLength={field.maxLength}
         className={inputClassName}
         style={{ textAlign: field.align || 'left' }}
+        autoComplete={field.password ? 'current-password' : undefined}
       />
     );
   };
@@ -621,7 +795,7 @@ const FormProgram: React.FC = () => {
 
         <div className="card mb-6">
           <div className="card-header">
-            <h2>Formular laden</h2>
+            <h2>{labels.form_load}</h2>
           </div>
           <div className="card-body">
             <div className="form-row">
@@ -690,7 +864,18 @@ const FormProgram: React.FC = () => {
             <div className="form-row">
               <div className="form-group">
                 <button onClick={loadFormConfiguration} className="btn btn-primary">
-                  Formular laden
+                  {labels.form_load}
+                </button>
+              </div>
+              <div className="form-group">
+                <button 
+                  onClick={() => navigate(`/program-generator?formId=${formId}`)} 
+                  className="btn btn-info flex items-center gap-2"
+                  disabled={!formId}
+                  title="Code Generator"
+                >
+                  <Code className="w-4 h-4" />
+                  Code generieren
                 </button>
               </div>
             </div>
@@ -725,20 +910,46 @@ const FormProgram: React.FC = () => {
                     <>
                       <button onClick={handleAdd} className="btn btn-success flex items-center gap-2">
                         <Plus className="w-4 h-4" />
-                        Neu
+                        {labels.btn_new}
                       </button>
                       <button onClick={handleUpdate} className="btn btn-primary flex items-center gap-2" disabled={records.length === 0}>
                         <Edit2 className="w-4 h-4" />
-                        Bearbeiten
+                        {labels.btn_edit}
                       </button>
                       <button onClick={handleCopy} className="btn btn-info flex items-center gap-2" disabled={records.length === 0}>
                         <Copy className="w-4 h-4" />
-                        Kopieren
+                        {labels.btn_copy}
                       </button>
                       <button onClick={handleDelete} className="btn btn-danger flex items-center gap-2" disabled={records.length === 0}>
                         <Trash2 className="w-4 h-4" />
-                        Löschen
+                        {labels.btn_delete}
                       </button>
+                      
+                      <div className="flex items-center gap-2 ml-4">
+                        <button 
+                          onClick={handleSearchToggle} 
+                          className="btn btn-secondary flex items-center gap-2"
+                          title="Suche"
+                        >
+                          <Search className="w-4 h-4" />
+                        </button>
+                        
+                        {searchExpanded && (
+                          <input
+                            ref={searchInputRef}
+                            type="text"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onKeyDown={handleSearchSubmit}
+                            placeholder="Suche... (Enter)"
+                            className="input-field"
+                            style={{ 
+                              width: '250px',
+                              transition: 'width 0.3s ease'
+                            }}
+                          />
+                        )}
+                      </div>
                     </>
                   )}
 
@@ -746,11 +957,11 @@ const FormProgram: React.FC = () => {
                     <>
                       <button onClick={handleSave} className="btn btn-primary flex items-center gap-2">
                         <Save className="w-4 h-4" />
-                        Speichern
+                        {labels.btn_save}
                       </button>
                       <button onClick={handleCancel} className="btn btn-secondary flex items-center gap-2">
                         <X className="w-4 h-4" />
-                        Abbrechen
+                        {labels.btn_cancel}
                       </button>
                     </>
                   )}
@@ -810,15 +1021,15 @@ const FormProgram: React.FC = () => {
                             <label className="label">
                               {field.label}
                               {field.required && (
-                                <span style={{ color: 'var(--color-red-600)', marginLeft: '2px' }}>*</span>
+                                <span className="required-indicator">*</span>
                               )}
                               {field.keyfield && (
-                                <span style={{ color: 'var(--color-blue-500)', marginLeft: '4px', fontSize: '0.75rem' }}>
+                                <span className="keyfield-indicator">
                                   (Key)
                                 </span>
                               )}
                               {!field.editable && (
-                                <span style={{ color: 'var(--color-gray-500)', marginLeft: '4px', fontSize: '0.875rem' }}>
+                                <span className="readonly-indicator">
                                   (ReadOnly)
                                 </span>
                               )}
@@ -852,7 +1063,7 @@ const FormProgram: React.FC = () => {
                       onClick={handleFirst}
                       disabled={currentIndex === 0 || records.length === 0}
                       className="btn btn-secondary"
-                      title="Erster Datensatz"
+                      title={labels.btn_first}
                     >
                       <ChevronsLeft className="w-4 h-4" />
                     </button>
@@ -860,7 +1071,7 @@ const FormProgram: React.FC = () => {
                       onClick={handlePrevious}
                       disabled={currentIndex === 0 || records.length === 0}
                       className="btn btn-secondary"
-                      title="Vorheriger Datensatz"
+                      title={labels.btn_previous}
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
@@ -868,7 +1079,7 @@ const FormProgram: React.FC = () => {
                       onClick={handleNext}
                       disabled={currentIndex >= records.length - 1 || records.length === 0}
                       className="btn btn-secondary"
-                      title="Nächster Datensatz"
+                      title={labels.btn_next}
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
@@ -876,7 +1087,7 @@ const FormProgram: React.FC = () => {
                       onClick={handleLast}
                       disabled={currentIndex >= records.length - 1 || records.length === 0}
                       className="btn btn-secondary"
-                      title="Letzter Datensatz"
+                      title={labels.btn_last}
                     >
                       <ChevronsRight className="w-4 h-4" />
                     </button>
@@ -888,7 +1099,7 @@ const FormProgram: React.FC = () => {
             {hasTableView && (
               <div className="card">
                 <div className="card-header">
-                  <h2 className="text-xl font-semibold">Alle Datensätze ({records.length})</h2>
+                  <h2 className="text-xl font-semibold">Alle Datensätze ({getFilteredAndSortedRecords().length} / {records.length})</h2>
                 </div>
                 <div className="table-container table-scroll">
                   <table className="table">
@@ -897,33 +1108,68 @@ const FormProgram: React.FC = () => {
                         {tableFields.map(field => (
                           <th
                             key={field.uniqueId}
+                            onClick={() => handleSort(field.fieldName)}
                             style={{
                               textAlign: field.align || 'left',
-                              whiteSpace: 'nowrap'
+                              whiteSpace: 'nowrap',
+                              cursor: 'pointer',
+                              userSelect: 'none'
                             }}
                           >
-                            {field.label}
-                            {field.keyfield && (
-                              <span style={{ marginLeft: '4px', color: 'var(--color-red-600)' }}>🔑</span>
-                            )}
+                            <div className="flex items-center gap-1">
+                              <span>{field.label}</span>
+                              {field.keyfield && (
+                                <span className="text-danger">🔑</span>
+                              )}
+                              {sortField === field.fieldName && (
+                                sortDirection === 'asc' 
+                                  ? <ArrowUp className="w-4 h-4" />
+                                  : <ArrowDown className="w-4 h-4" />
+                              )}
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                      <tr>
+                        {tableFields.map(field => (
+                          <th key={`filter-${field.uniqueId}`} style={{ padding: '4px' }}>
+                            <input
+                              type="text"
+                              value={columnFilters[field.fieldName] || ''}
+                              onChange={(e) => handleFilterChange(field.fieldName, e.target.value)}
+                              placeholder="Filter..."
+                              className="input-field"
+                              style={{ 
+                                width: '100%', 
+                                fontSize: '12px', 
+                                padding: '4px 8px',
+                                minWidth: '80px'
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
                           </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {records.length === 0 ? (
+                      {getFilteredAndSortedRecords().length === 0 ? (
                         <tr>
                           <td colSpan={tableFields.length} className="px-4 py-8 text-center text-gray-500">
                             Keine Datensätze vorhanden
                           </td>
                         </tr>
                       ) : (
-                        records.map((record, index) => (
+                        getFilteredAndSortedRecords().map((record, index) => {
+                          const isCurrentRecord = formConfig?.selectedFields
+                            .filter(f => f.keyfield)
+                            .every(kf => record[kf.fieldName] === currentRecord[kf.fieldName]) || false;
+                          
+                          return (
                           <tr
                             key={index}
-                            onClick={() => handleRowClick(record, index)}
+                            onClick={() => handleRowClick(record)}
                             className={`cursor-pointer hover:bg-gray-50 ${
-                              index === currentIndex && editMode === 'view' ? 'bg-blue-50' : ''
+                              isCurrentRecord && editMode === 'view' ? 'bg-blue-50' : ''
                             }`}
                           >
                             {tableFields.map(field => (
@@ -944,7 +1190,8 @@ const FormProgram: React.FC = () => {
                               </td>
                             ))}
                           </tr>
-                        ))
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
