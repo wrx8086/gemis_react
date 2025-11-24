@@ -1,10 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { apiGet } from '../../shared/api/apiClient';
+// @ts-ignore - Babel standalone has no TypeScript definitions
+import * as Babel from '@babel/standalone';
+import { apiGet, apiPost, apiPatch, apiDelete } from '../../shared/api/apiClient';
 import BaseLayout from '../../components/layout/BaseLayout';
-import { useParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSession } from '../../contexts/SessionContext';
+import {
+  Save, Plus, Copy, Trash2, X,
+  ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight,
+  Edit2, AlertCircle, ArrowUp, ArrowDown, Search, Code
+} from 'lucide-react';
 
 const DynamicProgramLoader: React.FC = () => {
-  const { programName } = useParams<{ programName: string }>();
+  const [searchParams] = useSearchParams();
+  const programName = searchParams.get('progname');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [Component, setComponent] = useState<React.ComponentType | null>(null);
@@ -27,61 +36,160 @@ const DynamicProgramLoader: React.FC = () => {
 
       const data = await apiGet('/program-generator', params);
 
-      if (!data.program_code) {
-        throw new Error('Kein Code zurückgegeben');
+      // Versuche verschiedene mögliche Feldnamen für den Code
+      let programCode = data.program_code 
+        || data.programCode 
+        || data.code 
+        || data.tsx_code 
+        || data.source_code
+        || data.tsxCode
+        || data.sourceCode;
+
+      // Falls verschachtelt (z.B. data.result.program_code)
+      if (!programCode && data.result) {
+        programCode = data.result.program_code 
+          || data.result.programCode 
+          || data.result.code
+          || data.result.tsx_code;
+      }
+
+      // Falls Array mit einem Element
+      if (!programCode && Array.isArray(data) && data.length > 0) {
+        programCode = data[0].program_code 
+          || data[0].programCode 
+          || data[0].code;
+      }
+
+      if (!programCode || programCode.length === 0) {
+        throw new Error(`Kein Code zurückgegeben. Verfügbare Felder: ${Object.keys(data).join(', ')}`);
       }
 
       // Dynamisch kompilieren und laden
-      const compiledComponent = compileComponent(data.program_code);
+      const compiledComponent = compileComponent(programCode, programName);
       setComponent(() => compiledComponent);
-      
+
       setIsLoading(false);
     } catch (err) {
-      console.error('Load Program Error:', err);
       setError(err instanceof Error ? err.message : 'Fehler beim Laden');
       setIsLoading(false);
     }
   };
 
-  const compileComponent = (code: string): React.ComponentType => {
+  const compileComponent = (code: string, componentName: string): React.ComponentType => {
     try {
-      // Entferne Import-Statements (werden nicht benötigt, da bereits geladen)
-      const cleanCode = code
-        .replace(/import.*from.*;/g, '')
-        .replace(/export default .*;/g, '');
+      // Konvertiere escaped newlines
+      const codeWithNewlines = code.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+      
+      // Entferne ALLE Import-Statements
+      const lines = codeWithNewlines.split('\n');
+      const nonImportLines: string[] = [];
+      let inImport = false;
 
-      // Erstelle Funktion mit React-Context
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const trimmed = line.trim();
+        
+        if (trimmed.startsWith('import ')) {
+          inImport = true;
+        }
+        
+        if (inImport) {
+          if (line.includes(';')) {
+            inImport = false;
+          }
+          continue;
+        }
+        
+        nonImportLines.push(line);
+      }
+
+      let cleanCode = nonImportLines.join('\n');
+      
+      // Entferne 'export default'
+      cleanCode = cleanCode.replace(/export\s+default\s+\w+;?\s*/g, '');
+      cleanCode = cleanCode.trim();
+
+      // Prüfe ob noch Import-Statements vorhanden sind
+      if (cleanCode.includes('import ')) {
+        throw new Error('Code enthält noch Import-Statements!');
+      }
+
+      // Babel-Transpilation für JSX → JavaScript
+      let transpiledCode: string;
+      try {
+        const babelResult = Babel.transform(cleanCode, {
+          presets: ['react'],
+          filename: `${componentName}.jsx`
+        });
+        transpiledCode = babelResult.code || '';
+      } catch (babelError) {
+        throw new Error(`Babel-Fehler: ${babelError instanceof Error ? babelError.message : 'Unbekannt'}`);
+      }
+
+      // Erstelle Funktion mit React-Context und allen Dependencies
       const componentFunction = new Function(
         'React',
         'useState',
         'useEffect',
+        'useRef',
         'apiGet',
         'apiPost',
         'apiPatch',
         'apiDelete',
         'BaseLayout',
-        `
-        ${cleanCode}
-        return ${programName};
-        `
+        'useSession',
+        'useNavigate',
+        'Save',
+        'Plus',
+        'Copy',
+        'Trash2',
+        'X',
+        'ChevronsLeft',
+        'ChevronLeft',
+        'ChevronRight',
+        'ChevronsRight',
+        'Edit2',
+        'AlertCircle',
+        'ArrowUp',
+        'ArrowDown',
+        'Search',
+        'Code',
+        transpiledCode + '\nreturn ' + componentName + ';'
       );
 
       // Führe aus mit Abhängigkeiten
-      const { useState, useEffect } = React;
+      const { useState, useEffect, useRef } = React;
       const CompiledComponent = componentFunction(
         React,
         useState,
         useEffect,
+        useRef,
         apiGet,
-        apiGet, // apiPost
-        apiGet, // apiPatch
-        apiGet, // apiDelete
-        BaseLayout
+        apiPost,
+        apiPatch,
+        apiDelete,
+        BaseLayout,
+        useSession,
+        useNavigate,
+        Save,
+        Plus,
+        Copy,
+        Trash2,
+        X,
+        ChevronsLeft,
+        ChevronLeft,
+        ChevronRight,
+        ChevronsRight,
+        Edit2,
+        AlertCircle,
+        ArrowUp,
+        ArrowDown,
+        Search,
+        Code
       );
 
       return CompiledComponent;
     } catch (err) {
-      console.error('Compile Error:', err);
       throw new Error('Fehler beim Kompilieren des Codes');
     }
   };

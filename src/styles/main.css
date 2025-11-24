@@ -812,7 +812,7 @@ body {
 }
 
 .table th {
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.75rem;
   text-align: left;
   font-weight: var(--font-semibold);
   color: var(--color-gray-700);
@@ -821,7 +821,7 @@ body {
 }
 
 .table td {
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.75rem;
   border-bottom: 1px solid var(--color-gray-200);
   color: var(--color-gray-900);
 }
@@ -836,6 +836,12 @@ body {
 
 .table tbody tr.table-row-selected {
   background-color: var(--color-primary-light);
+}
+
+.table tbody tr.table-row-active {
+  background-color: #bfdbfe !important; /* Intensiveres Blau */
+  border-left: 3px solid var(--color-primary);
+  box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.3);
 }
 
 .table tbody tr.table-row-clickable {
@@ -3068,4 +3074,106 @@ body {
 
 /* ============================================================================
    ENDE - FormDesigner Specific Styles
+   ============================================================================ */
+
+/* ============================================================================
+   Zusätzliche Utility-Klassen (für FormProgram & DynamicLoader)
+   ============================================================================ */
+
+/* Spinner / Loading Animation */
+.spinner {
+  border: 3px solid var(--color-gray-200);
+  border-top: 3px solid var(--color-primary);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  margin: 0 auto;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Borders */
+.border-t {
+  border-top: 1px solid var(--color-gray-200);
+}
+
+.border-b {
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+.border-l {
+  border-left: 1px solid var(--color-gray-200);
+}
+
+.border-r {
+  border-right: 1px solid var(--color-gray-200);
+}
+
+/* Padding Utilities */
+.p-2 {
+  padding: var(--spacing-sm);
+}
+
+.p-4 {
+  padding: var(--spacing-md);
+}
+
+.px-4 {
+  padding-left: var(--spacing-md);
+  padding-right: var(--spacing-md);
+}
+
+.py-8 {
+  padding-top: var(--spacing-xl);
+  padding-bottom: var(--spacing-xl);
+}
+
+/* Width / Height Utilities */
+.w-4 {
+  width: 1rem;
+}
+
+.w-12 {
+  width: 3rem;
+}
+
+.h-4 {
+  height: 1rem;
+}
+
+.h-12 {
+  height: 3rem;
+}
+
+/* Margin Utilities */
+.mx-auto {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Cursor Utilities */
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Background Utilities */
+.bg-gray-50 {
+  background-color: var(--color-gray-50);
+}
+
+.bg-blue-50 {
+  background-color: #eff6ff;
+}
+
+/* Hover States */
+.hover\:bg-gray-50:hover {
+  background-color: var(--color-gray-50);
+}
+
+/* ============================================================================
+   ENDE - main.css
    ============================================================================ */

@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { apiGet, apiPost } from '../../shared/api/apiClient';
 import BaseLayout from '../../components/layout/BaseLayout';
-import { Download, Save } from 'lucide-react';
+import { Download, Save, FileText } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
+import { generateFormProgramCode } from './FormProgramTemplate';
 
 interface FormConfig {
   formTitle: string;
   formId: string;
   selectedFields: any[];
-  targetUser: string;
-  targetLanguageId: string;
-  targetCompany: string;
+  targetUser?: string;
+  targetLanguageId?: string;
+  targetCompany?: string;
 }
 
 const ProgramGenerator: React.FC = () => {
@@ -46,79 +47,27 @@ const ProgramGenerator: React.FC = () => {
       const data = await apiGet('/formprogram', params);
       const config: FormConfig = data;
 
-      // Store target values for later use
-      setTargetUser(config.targetUser);
-      setTargetLanguageId(config.targetLanguageId);
-      setTargetCompany(config.targetCompany);
+      const company = config.targetCompany || '1000';
+      const user = config.targetUser || 'Admin';
+      const langId = config.targetLanguageId || '1';
 
-      const code = `import React, { useState, useEffect } from 'react';
-import { apiGet, apiPost, apiPatch, apiDelete } from '../../shared/api/apiClient';
-import BaseLayout from '../../components/layout/BaseLayout';
+      setTargetUser(user);
+      setTargetLanguageId(langId);
+      setTargetCompany(company);
 
-const ${toPascalCase(formId)}: React.FC = () => {
-  const [records, setRecords] = useState([]);
-  const [currentRecord, setCurrentRecord] = useState({});
-  const [editMode, setEditMode] = useState('view');
-
-  useEffect(() => {
-    loadRecords();
-  }, []);
-
-  const loadRecords = async () => {
-    const params = new URLSearchParams({
-      function: 'loadconfig',
-      company: '${config.targetCompany}',
-      user: '${config.targetUser}',
-      language_id: '${config.targetLanguageId}',
-      form_id: '${formId}'
-    });
-    const data = await apiGet('/formprogram', params);
-    if (data.records) {
-      setRecords(data.records);
-      if (data.records.length > 0) {
-        setCurrentRecord(data.records[0]);
-      }
-    }
-  };
-
-  const handleSave = async () => {
-    // CRUD Logic here
-    await loadRecords();
-  };
-
-  return (
-    <BaseLayout title="${config.formTitle}" showUserInfo={false}>
-      <div className="container-app">
-        <h1 className="text-3xl font-bold mb-6">${config.formTitle}</h1>
-        
-        <div className="card">
-          <div className="card-header">
-            <h2>Formular</h2>
-          </div>
-          <div className="card-body">
-            <form>
-${config.selectedFields.map(field => `              <div className="form-group">
-                <label className="form-label">${field.label}</label>
-                <input
-                  type="${getInputType(field.type)}"
-                  className="input-field"
-                  value={currentRecord['${field.fieldName}'] || ''}
-                  onChange={(e) => setCurrentRecord(prev => ({...prev, ${field.fieldName}: e.target.value}))}
-                  \${editMode === 'view' ? 'disabled' : ''}
-                />
-              </div>`).join('\n')}
-            </form>
-          </div>
-        </div>
-      </div>
-    </BaseLayout>
-  );
-};
-
-export default ${toPascalCase(formId)};`;
+      const componentName = toPascalCase(formId);
+      const code = generateFormProgramCode({
+        componentName: componentName,
+        formTitle: config.formTitle,
+        formId: config.formId,
+        targetCompany: company,
+        targetUser: user,
+        targetLanguageId: langId,
+        fields: config.selectedFields
+      });
 
       setGeneratedCode(code);
-      setProgramName(toPascalCase(formId));
+      setProgramName(componentName);
     } catch (err) {
       console.error('Generate Error:', err);
     }
@@ -126,22 +75,46 @@ export default ${toPascalCase(formId)};`;
   };
 
   const saveProgram = async () => {
-    if (!programName || !generatedCode) return;
+    if (!programName || !generatedCode) {
+      return;
+    }
 
     try {
-      await apiPost('/program-generator', {
+      // Base64-Encoding um UTF-8/Sonderzeichen-Probleme zu vermeiden
+      const base64Code = btoa(unescape(encodeURIComponent(generatedCode)));
+
+      const payload = {
         function: 'save',
         program_name: programName,
-        program_code: generatedCode,
+        program_code_base64: base64Code,
         form_id: formId,
-        target_user: targetUser,
-        target_language_id: targetLanguageId,
-        target_company: targetCompany
-      });
+        target_user: targetUser || 'Admin',
+        target_language_id: targetLanguageId || '1',
+        target_company: targetCompany || '1000'
+      };
+
+      await apiPost('/program-generator', payload);
       alert('Programm gespeichert!');
     } catch (err) {
       console.error('Save Error:', err);
       alert('Fehler beim Speichern');
+    }
+  };
+
+  const saveToFile = async () => {
+    if (!programName || !generatedCode) return;
+
+    try {
+      await apiPost('/program-generator', {
+        function: 'savefile',
+        program_name: programName,
+        program_code: generatedCode,
+        target_path: 'src/modules/generated/'
+      });
+      alert(`Datei gespeichert!\nÖffne: /test-generated?progname=${programName}`);
+    } catch (err) {
+      console.error('Save File Error:', err);
+      alert('Fehler beim Datei-Speichern');
     }
   };
 
@@ -232,6 +205,10 @@ export default ${toPascalCase(formId)};`;
                     <Download className="w-4 h-4" />
                     Download .tsx
                   </button>
+                  <button onClick={saveToFile} className="btn btn-info flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Als Datei speichern
+                  </button>
                   <button onClick={saveProgram} className="btn btn-success flex items-center gap-2">
                     <Save className="w-4 h-4" />
                     In DB speichern
@@ -273,21 +250,6 @@ function toPascalCase(str: string): string {
     .split(/[-_]/)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join('');
-}
-
-function getInputType(fieldType: string): string {
-  switch (fieldType) {
-    case 'integer':
-    case 'decimal':
-      return 'number';
-    case 'date':
-      return 'date';
-    case 'checkbox':
-    case 'logical':
-      return 'checkbox';
-    default:
-      return 'text';
-  }
 }
 
 export default ProgramGenerator;

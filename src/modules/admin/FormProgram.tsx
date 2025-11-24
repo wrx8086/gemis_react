@@ -130,10 +130,18 @@ const FormProgram: React.FC = () => {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [columnFilters, setColumnFilters] = useState<{ [key: string]: string }>({});
+  const [columnFiltersTemp, setColumnFiltersTemp] = useState<{ [key: string]: string }>({});
+  const columnFiltersRef = useRef<{ [key: string]: string }>({});
   
   const [searchExpanded, setSearchExpanded] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const searchTermRef = useRef<string>('');
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage] = useState<number>(50);
+  const [totalRecords, setTotalRecords] = useState<number>(0);
+  const [totalPages, setTotalPages] = useState<number>(0);
 
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -278,6 +286,91 @@ const FormProgram: React.FC = () => {
         setRecords([]);
         setCurrentRecord({});
         setCurrentIndex(0);
+      }
+
+      setIsLoading(false);
+    } catch (err) {
+      setError(`Fehler beim Laden: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
+      setIsLoading(false);
+    }
+  };
+
+  const loadRecords = async (pageOverride?: number) => {
+    if (!selectedCompany || !selectedUser || !selectedLanguage || !formId || !formConfig) {
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const pageToLoad = pageOverride !== undefined ? pageOverride : currentPage;
+      const tables = Array.from(new Set(formConfig.selectedFields.map(f => getTableFromFieldName(f.fieldName)).filter(Boolean)));
+      const tableName = tables[0];
+
+      const params = new URLSearchParams({
+        function: 'loaddata',
+        table: tableName,
+        company: selectedCompany,
+        user: selectedUser,
+        language_id: selectedLanguage,
+        page: String(pageToLoad),
+        limit: String(itemsPerPage)
+      });
+
+      // Suche hinzufügen
+      if (searchTermRef.current.trim()) {
+        params.append('search', searchTermRef.current.trim());
+      }
+
+      // Sortierung hinzufügen
+      if (sortField) {
+        params.append('sortField', sortField);
+        params.append('sortDirection', sortDirection);
+      }
+
+      // Filter hinzufügen
+      Object.keys(columnFiltersRef.current).forEach(key => {
+        if (columnFiltersRef.current[key]) {
+          params.append(`filter_${key}`, columnFiltersRef.current[key]);
+        }
+      });
+
+      const data = await apiGet('/formprogram', params);
+
+      if (data.selectOptionsFix) setSelectOptionsFix(data.selectOptionsFix);
+      if (data.selectOptions) setSelectOptions(data.selectOptions);
+
+      if (data.records && Array.isArray(data.records)) {
+        setRecords(data.records);
+        setTotalRecords(data.maxRecords || data.records.length);
+        setTotalPages(data.pageCount || Math.ceil((data.maxRecords || data.records.length) / itemsPerPage));
+
+        if (data.records.length > 0) {
+          setCurrentRecord(data.records[0]);
+          setCurrentIndex(0);
+        } else {
+          setCurrentRecord({});
+          setCurrentIndex(0);
+        }
+      } else if (data.dsResponse && Array.isArray(data.dsResponse.records)) {
+        setRecords(data.dsResponse.records);
+        setTotalRecords(data.dsResponse.maxRecords || data.dsResponse.records.length);
+        setTotalPages(data.dsResponse.pageCount || Math.ceil((data.dsResponse.maxRecords || data.dsResponse.records.length) / itemsPerPage));
+
+        if (data.dsResponse.records.length > 0) {
+          setCurrentRecord(data.dsResponse.records[0]);
+          setCurrentIndex(0);
+        } else {
+          setCurrentRecord({});
+          setCurrentIndex(0);
+        }
+      } else {
+        setRecords([]);
+        setCurrentRecord({});
+        setCurrentIndex(0);
+        setTotalRecords(0);
+        setTotalPages(0);
       }
 
       setIsLoading(false);
@@ -502,26 +595,54 @@ const FormProgram: React.FC = () => {
   };
 
   const handleSort = (fieldName: string) => {
-    if (sortField === fieldName) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    if (totalPages <= 1) {
+      // Nur 1 Seite: Nur clientseitig sortieren
+      if (sortField === fieldName) {
+        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      } else {
+        setSortField(fieldName);
+        setSortDirection('asc');
+      }
     } else {
-      setSortField(fieldName);
-      setSortDirection('asc');
+      // Mehrere Seiten: Backend-Request
+      if (sortField === fieldName) {
+        setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      } else {
+        setSortField(fieldName);
+        setSortDirection('asc');
+      }
+      setCurrentPage(1);
+      loadRecords(1);
     }
   };
 
   const handleFilterChange = (fieldName: string, value: string) => {
-    setColumnFilters(prev => ({
+    setColumnFiltersTemp(prev => ({
       ...prev,
       [fieldName]: value
     }));
   };
 
+  const handleFilterKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>, fieldName: string) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      
+      // IMMER Backend-Request bei ENTER (Server-Pagination)
+      const newFilters = { ...columnFiltersTemp };
+      columnFiltersRef.current = newFilters;
+      setColumnFilters(newFilters);
+      setCurrentPage(1);
+      
+      await loadRecords(1);
+    }
+  };
+
   const getFilteredAndSortedRecords = () => {
     let filtered = [...records];
 
-    Object.keys(columnFilters).forEach(fieldName => {
-      const filterValue = columnFilters[fieldName].toLowerCase();
+    // Clientseitiges Filtern mit TEMP-Filtern (live während Eingabe)
+    Object.keys(columnFiltersTemp).forEach(fieldName => {
+      const filterValue = columnFiltersTemp[fieldName]?.toLowerCase();
       if (filterValue) {
         filtered = filtered.filter(record => {
           const value = String(record[fieldName] || '').toLowerCase();
@@ -530,6 +651,7 @@ const FormProgram: React.FC = () => {
       }
     });
 
+    // Clientseitiges Sortieren
     if (sortField) {
       filtered.sort((a, b) => {
         const aVal = a[sortField] ?? '';
@@ -551,62 +673,64 @@ const FormProgram: React.FC = () => {
   };
 
   const handleSearchToggle = () => {
-    if (searchExpanded) {
-      setSearchExpanded(false);
-      setSearchTerm('');
-    } else {
+    if (!searchExpanded) {
+      // Beim Öffnen: Filter zurücksetzen
+      columnFiltersRef.current = {};
+      setColumnFilters({});
+      setColumnFiltersTemp({});
       setSearchExpanded(true);
       setTimeout(() => searchInputRef.current?.focus(), 100);
+    } else {
+      // Beim Schließen: Suche zurücksetzen und alle Daten laden
+      setSearchExpanded(false);
+      if (searchTermRef.current) {
+        searchTermRef.current = '';
+        setSearchTerm('');
+        setCurrentPage(1);
+        loadRecords(1);
+      }
     }
   };
 
   const handleSearchSubmit = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
+    e.preventDefault();
     
-    if (!searchTerm.trim()) return;
+    // Ref aktualisieren und Backend-Request
+    searchTermRef.current = searchTerm;
+    setCurrentPage(1);
+    await loadRecords(1);
+  };
 
-    try {
-      setIsLoading(true);
-      
-      const tables = Array.from(new Set(formConfig!.selectedFields.map(f => getTableFromFieldName(f.fieldName)).filter(Boolean)));
-      const tableName = tables[0];
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    loadRecords(page);
+  };
 
-      const params = new URLSearchParams({
-        function: 'selection',
-        table: tableName,
-        company: selectedCompany,
-        user: selectedUser,
-        language_id: selectedLanguage,
-        search: searchTerm
-      });
-
-      const data = await apiGet('/formprogram', params);
-
-      if (data.records && Array.isArray(data.records)) {
-        setRecords(data.records);
-        if (data.records.length > 0) {
-          setCurrentRecord(data.records[0]);
-          setCurrentIndex(0);
-        } else {
-          setCurrentRecord({});
-          setCurrentIndex(0);
-        }
-      } else if (data.dsResponse && Array.isArray(data.dsResponse.records)) {
-        setRecords(data.dsResponse.records);
-        if (data.dsResponse.records.length > 0) {
-          setCurrentRecord(data.dsResponse.records[0]);
-          setCurrentIndex(0);
-        } else {
-          setCurrentRecord({});
-          setCurrentIndex(0);
-        }
+  const getPageNumbers = () => {
+    const pages: (number | string)[] = [];
+    const maxVisible = 7;
+    
+    if (totalPages <= maxVisible) {
+      for (let i = 1; i <= totalPages; i++) pages.push(i);
+    } else {
+      if (currentPage <= 4) {
+        for (let i = 1; i <= 5; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
+      } else if (currentPage >= totalPages - 3) {
+        pages.push(1);
+        pages.push('...');
+        for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i);
+      } else {
+        pages.push(1);
+        pages.push('...');
+        for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i);
+        pages.push('...');
+        pages.push(totalPages);
       }
-
-      setIsLoading(false);
-    } catch (err) {
-      console.error('Search Error:', err);
-      setIsLoading(false);
     }
+    return pages;
   };
 
   const renderField = (field: Field) => {
@@ -1135,9 +1259,10 @@ const FormProgram: React.FC = () => {
                           <th key={`filter-${field.uniqueId}`} style={{ padding: '4px' }}>
                             <input
                               type="text"
-                              value={columnFilters[field.fieldName] || ''}
+                              value={columnFiltersTemp[field.fieldName] || ''}
                               onChange={(e) => handleFilterChange(field.fieldName, e.target.value)}
-                              placeholder="Filter..."
+                              onKeyDown={(e) => handleFilterKeyDown(e, field.fieldName)}
+                              placeholder="Filter... (Enter)"
                               className="input-field"
                               style={{ 
                                 width: '100%', 
@@ -1196,6 +1321,69 @@ const FormProgram: React.FC = () => {
                     </tbody>
                   </table>
                 </div>
+                
+                {totalPages > 1 && (
+                  <div className="card-footer" style={{ padding: '8px 16px', borderTop: '1px solid var(--color-gray-200)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '4px', alignItems: 'center' }}>
+                      <button 
+                        onClick={() => handlePageChange(1)} 
+                        disabled={currentPage === 1}
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 8px' }}
+                        title="Erste Seite"
+                      >
+                        <ChevronsLeft className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handlePageChange(currentPage - 1)} 
+                        disabled={currentPage === 1}
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 8px' }}
+                        title="Vorherige Seite"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      
+                      {getPageNumbers().map((page, idx) => 
+                        page === '...' ? (
+                          <span key={`ellipsis-${idx}`} style={{ padding: '4px 8px', display: 'flex', alignItems: 'center' }}>...</span>
+                        ) : (
+                          <button
+                            key={page}
+                            onClick={() => handlePageChange(page as number)}
+                            className={`btn ${currentPage === page ? 'btn-primary' : 'btn-secondary'}`}
+                            style={{ padding: '4px 12px', minWidth: '40px' }}
+                          >
+                            {page}
+                          </button>
+                        )
+                      )}
+                      
+                      <button 
+                        onClick={() => handlePageChange(currentPage + 1)} 
+                        disabled={currentPage === totalPages}
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 8px' }}
+                        title="Nächste Seite"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={() => handlePageChange(totalPages)} 
+                        disabled={currentPage === totalPages}
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 8px' }}
+                        title="Letzte Seite"
+                      >
+                        <ChevronsRight className="w-4 h-4" />
+                      </button>
+                      
+                      <span style={{ marginLeft: '16px', fontSize: '14px', color: 'var(--color-gray-600)' }}>
+                        Seite {currentPage} von {totalPages} ({totalRecords} Datensätze)
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </>

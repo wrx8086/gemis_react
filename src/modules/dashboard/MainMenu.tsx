@@ -37,7 +37,6 @@ const MainMenu: React.FC<MainMenuProps> = ({ menuItems }) => {
 
     // Safety check: Wenn menuItems nicht existiert oder kein Array ist
     if (!menuItems || !Array.isArray(menuItems)) {
-      console.warn('⚠️ MainMenu: menuItems ist undefined oder kein Array:', menuItems);
       return structure;
     }
 
