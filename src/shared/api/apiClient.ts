@@ -196,7 +196,8 @@ export const apiPatch = async (
 
 // DELETE Request
 export const apiDelete = async (
-  endpoint: string
+  endpoint: string,
+  data?: any
 ): Promise<any> => {
   const url = `${getBaseURL()}${endpoint}`;
 
@@ -206,10 +207,16 @@ export const apiDelete = async (
 
   headers = addSessionHeaders(headers);
 
-  const response = await fetch(url, {
+  const options: RequestInit = {
     method: 'DELETE',
     headers,
-  });
+  };
+  
+  if (data) {
+    options.body = JSON.stringify(data);
+  }
+
+  const response = await fetch(url, options);
 
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);

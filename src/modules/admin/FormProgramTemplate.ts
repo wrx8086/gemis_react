@@ -42,7 +42,6 @@ const ${config.componentName} = () => {
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const searchTermRef = useRef('');
-  const [columnFilters, setColumnFilters] = useState({});
   const [columnFiltersTemp, setColumnFiltersTemp] = useState({});
   const columnFiltersRef = useRef({});
   const [sortField, setSortField] = useState(null);
@@ -59,6 +58,9 @@ const ${config.componentName} = () => {
   const inputRefs = useRef({});
   const searchInputRef = useRef(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const skipNextLoadRef = useRef(false);
+  const [keyfieldValues, setKeyfieldValues] = useState({});
+  const keyfieldValuesRef = useRef({});
 
   // Keyboard Navigation für Tabelle (↑↓)
   useEffect(() => {
@@ -145,6 +147,10 @@ const ${config.componentName} = () => {
 
   useEffect(() => { 
     if (isInitialized) {
+      if (skipNextLoadRef.current) {
+        skipNextLoadRef.current = false;
+        return;
+      }
       loadRecords(); 
     }
   }, [currentPage, isInitialized, forceReload]);
@@ -171,6 +177,21 @@ const ${config.componentName} = () => {
       if (data.selectOptionsFix) setSelectOptionsFix(data.selectOptionsFix);
       if (data.selectOptions) setSelectOptions(data.selectOptions);
       
+      // Initiale Werte für Select-Felder setzen (erster Wert als Default)
+      const initialValues = {};
+      const allOptions = { ...data.selectOptionsFix, ...data.selectOptions };
+      FORM_CONFIG.forEach(field => {
+        if (field.type === 'select' && allOptions[field.fieldName]?.length > 0) {
+          initialValues[field.fieldName] = allOptions[field.fieldName][0].value;
+        }
+      });
+      
+      // Speichere initiale Werte für loadRecords (State für UI, Ref für API-Calls)
+      if (Object.keys(initialValues).length > 0) {
+        keyfieldValuesRef.current = initialValues;
+        setKeyfieldValues(initialValues);
+      }
+      
       setIsInitialized(true);
     } catch (err) {
       setError(\`Fehler beim Initialisieren: \${err instanceof Error ? err.message : 'Unbekannt'}\`);
@@ -178,7 +199,7 @@ const ${config.componentName} = () => {
     }
   };
 
-  const loadRecords = async (pageOverride) => {
+  const loadRecords = async (pageOverride, skipSelect, isChange) => {
     try {
       setIsLoading(true);
       setError(null);
@@ -209,6 +230,19 @@ const ${config.componentName} = () => {
           params.append(\`filter_\${key}\`, columnFiltersRef.current[key]);
         }
       });
+      
+      // Keyfield-Werte hinzufügen (aus keyfieldValuesRef)
+      FORM_CONFIG.filter(f => f.keyfield && f.type === 'select').forEach(field => {
+        const value = keyfieldValuesRef.current[field.fieldName];
+        if (value !== undefined && value !== '') {
+          params.append('keyfield_' + field.fieldName, String(value));
+        }
+      });
+      
+      // Bei Keyfield-Änderung: change=yes Parameter hinzufügen
+      if (isChange) {
+        params.append('change', 'yes');
+      }
 
       const data = await apiGet('/dynamic-form', params);
       
@@ -220,42 +254,64 @@ const ${config.componentName} = () => {
         setTotalRecords(data.maxRecords || data.records.length);
         setTotalPages(data.pageCount || Math.ceil((data.maxRecords || data.records.length) / itemsPerPage));
         
-        if (data.records.length > 0) {
+        // Nur automatisch selektieren wenn nicht skipSelect
+        if (!skipSelect && data.records.length > 0) {
           setCurrentRecord(data.records[0]);
           setCurrentIndex(0);
         }
+        
+        setIsLoading(false);
+        return data.records;
       } else {
         setRecords([]);
-        setCurrentRecord({});
-        setCurrentIndex(0);
+        if (!skipSelect) {
+          setCurrentRecord({});
+          setCurrentIndex(0);
+        }
         setTotalRecords(0);
         setTotalPages(0);
+        setIsLoading(false);
+        return [];
       }
-
-      setIsLoading(false);
     } catch (err) {
       setError(\`Fehler beim Laden: \${err instanceof Error ? err.message : 'Unbekannt'}\`);
       setIsLoading(false);
+      return [];
     }
+  };
+
+  const focusFirstEditableField = () => {
+    setTimeout(() => {
+      const form = document.querySelector('form');
+      if (form) {
+        const firstInput = form.querySelector('input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])');
+        if (firstInput) firstInput.focus();
+      }
+    }, 50);
   };
 
   const handleAdd = () => {
     if (isDirty && !confirm('Änderungen verwerfen?')) return;
-    const emptyRecord = {};
+    const newRecord = {};
     FORM_CONFIG.forEach(field => {
-      if (field.type === 'select') emptyRecord[field.fieldName] = '';
-      else if (field.type === 'logical' || field.type === 'checkbox') emptyRecord[field.fieldName] = false;
-      else if (field.type === 'integer' || field.type === 'decimal') emptyRecord[field.fieldName] = 0;
-      else emptyRecord[field.fieldName] = '';
+      if (field.type === 'select') {
+        // Wert vom aktuellen Record übernehmen (falls vorhanden)
+        newRecord[field.fieldName] = currentRecord[field.fieldName] ?? '';
+      }
+      else if (field.type === 'logical' || field.type === 'checkbox') newRecord[field.fieldName] = false;
+      else if (field.type === 'integer' || field.type === 'decimal') newRecord[field.fieldName] = 0;
+      else newRecord[field.fieldName] = '';
     });
-    setCurrentRecord(emptyRecord);
+    setCurrentRecord(newRecord);
     setMutationMode('add');
     setIsDirty(false);
+    focusFirstEditableField();
   };
 
   const handleEdit = () => {
     if (records.length === 0) return;
     setMutationMode('edit');
+    focusFirstEditableField();
   };
 
   const handleCopy = () => {
@@ -263,21 +319,85 @@ const ${config.componentName} = () => {
     setCurrentRecord({ ...currentRecord });
     setMutationMode('copy');
     setIsDirty(false);
+    focusFirstEditableField();
   };
 
   const handleSave = async () => {
     try {
       const params = new URLSearchParams({ formId: FORM_ID });
       
+      // Select-Keyfield-Werte hinzufügen
+      FORM_CONFIG.filter(f => f.keyfield && f.type === 'select').forEach(field => {
+        const value = keyfieldValuesRef.current[field.fieldName];
+        if (value !== undefined && value !== '') {
+          params.append('keyfield_' + field.fieldName, String(value));
+        }
+      });
+      
       if (mutationMode === 'add' || mutationMode === 'copy') {
         params.append('function', 'create');
-        await apiPost(\`/dynamic-form?\${params.toString()}\`, { record: currentRecord });
+        const response = await apiPost(\`/dynamic-form?\${params.toString()}\`, { record: currentRecord });
+        
+        // Fehlerbehandlung
+        if (response.success === false) {
+          alert(response.message || 'Fehler beim Erstellen');
+          return;
+        }
+        
+        // Smart Jump: Backend gibt Position des neuen Datensatzes zurück
+        if (response.position) {
+          const { page, index, totalRecords } = response.position;
+          
+          // Update Pagination Info
+          setTotalRecords(totalRecords);
+          setTotalPages(Math.ceil(totalRecords / itemsPerPage));
+          
+          // Verhindere dass useEffect nochmal loadRecords aufruft
+          skipNextLoadRef.current = true;
+          setCurrentPage(page);
+          
+          // Lade Seite OHNE automatische Selektion
+          const loadedRecords = await loadRecords(page, true);
+          
+          // Selektiere den neuen Datensatz am Index vom Backend
+          if (loadedRecords && loadedRecords.length > index) {
+            const newRecord = loadedRecords[index];
+            setCurrentRecord(newRecord);
+            setCurrentIndex(index);
+            
+            // Scroll zur Zeile in der Tabelle
+            setTimeout(() => {
+              const keyFields = FORM_CONFIG.filter(f => f.keyfield);
+              const rowId = keyFields.map(kf => newRecord[kf.fieldName]).join('-');
+              const rowElement = document.getElementById(\`row-\${rowId}\`);
+              if (rowElement) {
+                rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }, 50);
+          }
+        } else {
+          // Fallback: Normale Reload
+          await loadRecords();
+        }
       } else if (mutationMode === 'edit') {
         params.append('function', 'update');
-        await apiPatch(\`/dynamic-form?\${params.toString()}\`, { record: currentRecord });
+        const response = await apiPatch(\`/dynamic-form?\${params.toString()}\`, { record: currentRecord });
+        
+        // Fehlerbehandlung
+        if (response.success === false) {
+          alert(response.message || 'Fehler beim Aktualisieren');
+          return;
+        }
+        
+        // Nach UPDATE: Nur den aktualisierten Datensatz im Array ersetzen
+        if (response.record) {
+          const updatedRecords = [...records];
+          updatedRecords[currentIndex] = response.record;
+          setRecords(updatedRecords);
+          setCurrentRecord(response.record);
+        }
       }
       
-      await loadRecords();
       setMutationMode('view');
       setIsDirty(false);
     } catch (err) {
@@ -294,8 +414,65 @@ const ${config.componentName} = () => {
         formId: FORM_ID,
         function: 'delete'
       });
-      await apiDelete(\`/dynamic-form?\${params.toString()}\`, { record: currentRecord });
-      await loadRecords();
+      const response = await apiDelete(\`/dynamic-form?\${params.toString()}\`, { record: currentRecord });
+      
+      // Fehlerbehandlung
+      if (response.success === false) {
+        alert(response.message || 'Fehler beim Löschen');
+        return;
+      }
+      
+      // Smart Jump: Backend gibt Position zurück
+      if (response.position) {
+        const { page, index, totalRecords } = response.position;
+        
+        // Update Pagination Info
+        setTotalRecords(totalRecords);
+        setTotalPages(Math.ceil(totalRecords / itemsPerPage));
+        
+        // Verhindere dass useEffect nochmal loadRecords aufruft
+        skipNextLoadRef.current = true;
+        setCurrentPage(page);
+        
+        if (totalRecords === 0) {
+          // Keine Datensätze mehr
+          setRecords([]);
+          setCurrentRecord({});
+          setCurrentIndex(0);
+        } else {
+          // Lade Seite OHNE automatische Selektion
+          const loadedRecords = await loadRecords(page, true);
+          
+          // Selektiere Datensatz am Index vom Backend
+          let selectedRecord = null;
+          if (loadedRecords && loadedRecords.length > index) {
+            selectedRecord = loadedRecords[index];
+            setCurrentRecord(selectedRecord);
+            setCurrentIndex(index);
+          } else if (loadedRecords && loadedRecords.length > 0) {
+            // Fallback: letzter Datensatz der Seite
+            selectedRecord = loadedRecords[loadedRecords.length - 1];
+            setCurrentRecord(selectedRecord);
+            setCurrentIndex(loadedRecords.length - 1);
+          }
+          
+          // Scroll zur Zeile in der Tabelle
+          if (selectedRecord) {
+            setTimeout(() => {
+              const keyFields = FORM_CONFIG.filter(f => f.keyfield);
+              const rowId = keyFields.map(kf => selectedRecord[kf.fieldName]).join('-');
+              const rowElement = document.getElementById(\`row-\${rowId}\`);
+              if (rowElement) {
+                rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }, 50);
+          }
+        }
+      } else {
+        // Fallback: Normale Reload
+        await loadRecords();
+      }
+      
       setMutationMode('view');
     } catch (err) {
       alert(\`Fehler beim Löschen: \${err instanceof Error ? err.message : 'Unbekannt'}\`);
@@ -319,15 +496,73 @@ const ${config.componentName} = () => {
     setIsDirty(true);
   };
 
+  const handleKeyfieldSelectChange = async (fieldName, value) => {
+    // Aktualisiere Ref und State mit neuem Wert
+    const newValues = { ...keyfieldValuesRef.current, [fieldName]: value };
+    keyfieldValuesRef.current = newValues;
+    setKeyfieldValues(newValues);
+    
+    // Lade Daten neu mit allen aktuellen Keyfield-Werten (change=yes)
+    setCurrentPage(1);
+    await loadRecords(1, false, true);
+  };
+
+  const handleChangeAction = async (fieldName, value, action) => {
+    if (!action) return;
+    
+    try {
+      const params = new URLSearchParams({
+        formId: FORM_ID,
+        function: 'change',
+        field: fieldName,
+        action: action,
+        value: String(value)
+      });
+      
+      // Key-Felder als einzelne Parameter hinzufügen (keyfield_FELDNAME=WERT)
+      FORM_CONFIG.filter(f => f.keyfield).forEach(keyField => {
+        if (currentRecord[keyField.fieldName] !== undefined) {
+          params.append('keyfield_' + keyField.fieldName, String(currentRecord[keyField.fieldName]));
+        }
+      });
+      
+      const data = await apiGet('/dynamic-form', params);
+      
+      // Backend kann neue selectOptions zurückliefern
+      if (data.selectOptions) {
+        setSelectOptions(prev => ({ ...prev, ...data.selectOptions }));
+      }
+      
+      // Backend kann auch Feldwerte aktualisieren
+      if (data.fieldUpdates) {
+        setCurrentRecord(prev => ({ ...prev, ...data.fieldUpdates }));
+      }
+    } catch (err) {
+      console.error('Change action error:', err);
+    }
+  };
+
   const handleKeyDown = (e, field) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      const fieldIds = FORM_CONFIG.filter(f => !f.hidden && f.editable).map(f => f.uniqueId);
-      const currentIdx = fieldIds.indexOf(field.uniqueId);
-      const nextIdx = currentIdx + 1;
-      if (nextIdx < fieldIds.length) {
-        const nextInput = inputRefs.current[fieldIds[nextIdx]];
-        if (nextInput) nextInput.focus();
+      
+      const form = document.querySelector('form');
+      if (!form) return;
+      
+      const focusableElements = Array.from(
+        form.querySelectorAll('input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])')
+      );
+      
+      const currentIndex = focusableElements.indexOf(e.target);
+      if (currentIndex > -1) {
+        if (currentIndex < focusableElements.length - 1) {
+          focusableElements[currentIndex + 1].focus();
+        } else {
+          // Letztes Feld - automatisch speichern wenn im Edit-Modus
+          if (mutationMode !== 'view') {
+            handleSave();
+          }
+        }
       }
     }
   };
@@ -357,14 +592,13 @@ const ${config.componentName} = () => {
     setColumnFiltersTemp(prev => ({ ...prev, [fieldName]: value }));
   };
 
-  const handleFilterKeyDown = async (e, fieldName) => {
+  const handleFilterKeyDown = async (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       
       // IMMER Backend-Request bei ENTER (Server-Pagination)
       const newFilters = { ...columnFiltersTemp };
       columnFiltersRef.current = newFilters;
-      setColumnFilters(newFilters);
       setCurrentPage(1);
       
       // Direkt laden - die ref ist bereits aktualisiert
@@ -385,14 +619,24 @@ const ${config.componentName} = () => {
       });
     });
 
-    // Clientseitiges Sortieren
+    // Clientseitiges Sortieren (case-insensitive wie Backend)
     if (sortField) {
       filtered.sort((a, b) => {
-        const aVal = a[sortField];
-        const bVal = b[sortField];
-        if (aVal === bVal) return 0;
-        if (sortDirection === 'asc') return aVal > bVal ? 1 : -1;
-        return aVal < bVal ? 1 : -1;
+        const aVal = a[sortField] ?? '';
+        const bVal = b[sortField] ?? '';
+        
+        // Für Zahlen: direkter Vergleich
+        if (typeof aVal === 'number' && typeof bVal === 'number') {
+          return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+        }
+        
+        // Für Strings: case-insensitive Vergleich
+        const aStr = String(aVal).toLowerCase();
+        const bStr = String(bVal).toLowerCase();
+        
+        if (aStr === bStr) return 0;
+        if (sortDirection === 'asc') return aStr > bStr ? 1 : -1;
+        return aStr < bStr ? 1 : -1;
       });
     }
     
@@ -403,7 +647,6 @@ const ${config.componentName} = () => {
     if (!searchExpanded) {
       // Beim Öffnen: Filter zurücksetzen
       columnFiltersRef.current = {};
-      setColumnFilters({});
       setColumnFiltersTemp({});
       setSearchExpanded(true);
       setTimeout(() => searchInputRef.current?.focus(), 100);
@@ -475,7 +718,7 @@ const ${config.componentName} = () => {
 
   if (isLoading) {
     return (
-      <BaseLayout title={FORM_TITLE} showUserInfo={true}>
+      <BaseLayout title={FORM_TITLE} showUserInfo={true} footerRight={FORM_ID}>
         <div className="container-app">
           <div className="spinner"></div>
           <p>Lade Daten...</p>
@@ -485,12 +728,22 @@ const ${config.componentName} = () => {
   }
 
   return (
-    <BaseLayout title={FORM_TITLE} showUserInfo={true}>
+    <BaseLayout title={FORM_TITLE} showUserInfo={true} footerRight={FORM_ID}>
       <style>{\`
         .form-compact .form-group { margin-bottom: 0.5rem; }
         .form-compact .input-field,
         .form-compact .select-field { height: 32px; padding: 4px 8px; font-size: 14px; }
         .form-compact .label { margin-bottom: 2px; font-size: 13px; }
+        
+        /* Number-Input ohne Spinner */
+        .no-spinner::-webkit-outer-spin-button,
+        .no-spinner::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .no-spinner {
+          -moz-appearance: textfield;
+        }
         
         .table-scroll { 
           max-height: 250px; 
@@ -580,8 +833,21 @@ const ${config.componentName} = () => {
             <form onSubmit={(e) => e.preventDefault()}>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'flex-start', width: '100%' }}>
                 {FORM_CONFIG.filter(f => !f.hidden).map((field) => {
-                  const isDisabled = mutationMode === 'view' || !field.editable || (mutationMode === 'edit' && field.keyfield);
-                  const value = currentRecord[field.fieldName] ?? '';
+                  const isSelectKeyfield = field.type === 'select' && field.keyfield;
+                  
+                  // Disabled-Logik:
+                  // - View: alles disabled, AUSSER Select-Keyfields
+                  // - Edit: alle Keyfields disabled
+                  // - Add/Copy: nur Select-Keyfields disabled (andere Keyfields editierbar)
+                  const isDisabled = !field.editable || 
+                    (mutationMode === 'view' && !isSelectKeyfield) ||
+                    (mutationMode === 'edit' && field.keyfield) ||
+                    ((mutationMode === 'add' || mutationMode === 'copy') && isSelectKeyfield);
+                  
+                  // Für Select-Keyfields: Wert aus Filter-State (View/Add/Copy), sonst aus Record
+                  const value = (isSelectKeyfield && mutationMode !== 'edit') 
+                    ? (keyfieldValues[field.fieldName] ?? '') 
+                    : (currentRecord[field.fieldName] ?? '');
                   return (
                     <React.Fragment key={field.uniqueId}>
                       {field.newLine && <div className="flex-break" />}
@@ -609,7 +875,17 @@ const ${config.componentName} = () => {
                             ref={(el) => (inputRefs.current[field.uniqueId] = el)}
                             name={field.fieldName}
                             value={value}
-                            onChange={(e) => handleFieldChange(field.fieldName, e.target.value)}
+                            onChange={(e) => {
+                              // Keyfield-Select im View-Modus: Daten neu laden
+                              if (field.keyfield && mutationMode === 'view') {
+                                handleKeyfieldSelectChange(field.fieldName, e.target.value);
+                              } else {
+                                handleFieldChange(field.fieldName, e.target.value);
+                                if (field.onChangeAction) {
+                                  handleChangeAction(field.fieldName, e.target.value, field.onChangeAction);
+                                }
+                              }
+                            }}
                             onKeyDown={(e) => handleKeyDown(e, field)}
                             disabled={isDisabled}
                             className="select-field"
@@ -626,7 +902,13 @@ const ${config.componentName} = () => {
                             type="checkbox"
                             name={field.fieldName}
                             checked={!!value}
-                            onChange={(e) => handleFieldChange(field.fieldName, e.target.checked)}
+                            onChange={(e) => {
+                              handleFieldChange(field.fieldName, e.target.checked);
+                              if (field.onChangeAction) {
+                                handleChangeAction(field.fieldName, e.target.checked, field.onChangeAction);
+                              }
+                            }}
+                            onKeyDown={(e) => handleKeyDown(e, field)}
                             disabled={isDisabled}
                             className="checkbox"
                           />
@@ -637,11 +919,16 @@ const ${config.componentName} = () => {
                             name={field.fieldName}
                             value={value}
                             onChange={(e) => handleFieldChange(field.fieldName, e.target.value)}
+                            onBlur={(e) => {
+                              if (field.onChangeAction) {
+                                handleChangeAction(field.fieldName, e.target.value, field.onChangeAction);
+                              }
+                            }}
                             onKeyDown={(e) => handleKeyDown(e, field)}
                             disabled={isDisabled}
                             placeholder={field.placeholder}
                             maxLength={field.maxLength}
-                            className="input-field"
+                            className={\`input-field\${(field.type === 'integer' || field.type === 'decimal') && !field.showSpinner ? ' no-spinner' : ''}\`}
                             style={{ textAlign: field.align || 'left' }}
                             autoComplete={
                               field.password ? 'current-password' :
@@ -719,7 +1006,7 @@ const ${config.componentName} = () => {
                           type="text"
                           value={columnFiltersTemp[field.fieldName] || ''}
                           onChange={(e) => handleFilterChange(field.fieldName, e.target.value)}
-                          onKeyDown={(e) => handleFilterKeyDown(e, field.fieldName)}
+                          onKeyDown={handleFilterKeyDown}
                           placeholder="Filter... (Enter)"
                           className="input-field"
                           style={{ width: '100%', fontSize: '12px', padding: '4px 8px', minWidth: '80px' }}

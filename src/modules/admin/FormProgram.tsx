@@ -50,6 +50,7 @@ interface Field {
   showInTable?: boolean;
   keyfield?: boolean;
   password?: boolean;
+  onChangeAction?: string;
 }
 
 interface FormConfig {
@@ -129,7 +130,6 @@ const FormProgram: React.FC = () => {
   
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [columnFilters, setColumnFilters] = useState<{ [key: string]: string }>({});
   const [columnFiltersTemp, setColumnFiltersTemp] = useState<{ [key: string]: string }>({});
   const columnFiltersRef = useRef<{ [key: string]: string }>({});
   
@@ -295,9 +295,9 @@ const FormProgram: React.FC = () => {
     }
   };
 
-  const loadRecords = async (pageOverride?: number) => {
+  const loadRecords = async (pageOverride?: number, skipSelect?: boolean): Promise<RecordData[]> => {
     if (!selectedCompany || !selectedUser || !selectedLanguage || !formId || !formConfig) {
-      return;
+      return [];
     }
 
     try {
@@ -341,42 +341,52 @@ const FormProgram: React.FC = () => {
       if (data.selectOptionsFix) setSelectOptionsFix(data.selectOptionsFix);
       if (data.selectOptions) setSelectOptions(data.selectOptions);
 
+      let loadedRecords: RecordData[] = [];
+
       if (data.records && Array.isArray(data.records)) {
+        loadedRecords = data.records;
         setRecords(data.records);
         setTotalRecords(data.maxRecords || data.records.length);
         setTotalPages(data.pageCount || Math.ceil((data.maxRecords || data.records.length) / itemsPerPage));
 
-        if (data.records.length > 0) {
+        // Nur automatisch selektieren wenn nicht skipSelect
+        if (!skipSelect && data.records.length > 0) {
           setCurrentRecord(data.records[0]);
           setCurrentIndex(0);
-        } else {
+        } else if (!skipSelect) {
           setCurrentRecord({});
           setCurrentIndex(0);
         }
       } else if (data.dsResponse && Array.isArray(data.dsResponse.records)) {
+        loadedRecords = data.dsResponse.records;
         setRecords(data.dsResponse.records);
         setTotalRecords(data.dsResponse.maxRecords || data.dsResponse.records.length);
         setTotalPages(data.dsResponse.pageCount || Math.ceil((data.dsResponse.maxRecords || data.dsResponse.records.length) / itemsPerPage));
 
-        if (data.dsResponse.records.length > 0) {
+        // Nur automatisch selektieren wenn nicht skipSelect
+        if (!skipSelect && data.dsResponse.records.length > 0) {
           setCurrentRecord(data.dsResponse.records[0]);
           setCurrentIndex(0);
-        } else {
+        } else if (!skipSelect) {
           setCurrentRecord({});
           setCurrentIndex(0);
         }
       } else {
         setRecords([]);
-        setCurrentRecord({});
-        setCurrentIndex(0);
+        if (!skipSelect) {
+          setCurrentRecord({});
+          setCurrentIndex(0);
+        }
         setTotalRecords(0);
         setTotalPages(0);
       }
 
       setIsLoading(false);
+      return loadedRecords;
     } catch (err) {
       setError(`Fehler beim Laden: ${err instanceof Error ? err.message : 'Unbekannter Fehler'}`);
       setIsLoading(false);
+      return [];
     }
   };
 
@@ -442,14 +452,47 @@ const FormProgram: React.FC = () => {
       const keyFields = formConfig!.selectedFields.filter(f => f.keyfield);
       const keyParams = keyFields.map(f => `${f.fieldName}=${currentRecord[f.fieldName]}`).join('&');
 
-      await apiDelete(`/formprogram?table=${tableName}&company=${selectedCompany}&user=${selectedUser}&language_id=${selectedLanguage}&${keyParams}`);
+      const response = await apiDelete(`/formprogram?table=${tableName}&company=${selectedCompany}&user=${selectedUser}&language_id=${selectedLanguage}&${keyParams}`);
+
+      // Fehlerbehandlung
+      if (response.success === false) {
+        alert(response.message || 'Fehler beim Löschen');
+        return;
+      }
 
       alert('Datensatz erfolgreich gelöscht');
-      await loadFormConfiguration();
-
-      if (records.length > 1) {
-        setCurrentIndex(0);
-        setCurrentRecord(records[0]);
+      
+      // Smart Jump: Backend gibt Position zurück
+      if (response.position) {
+        const { page, index, totalRecords } = response.position;
+        
+        // Update Pagination Info
+        setTotalRecords(totalRecords);
+        setTotalPages(Math.ceil(totalRecords / itemsPerPage));
+        setCurrentPage(page);
+        
+        if (totalRecords === 0) {
+          // Keine Datensätze mehr
+          setRecords([]);
+          setCurrentRecord({});
+          setCurrentIndex(0);
+        } else {
+          // Lade Seite OHNE automatische Selektion
+          const loadedRecords = await loadRecords(page, true);
+          
+          // Selektiere Datensatz am Index vom Backend
+          if (loadedRecords && loadedRecords.length > index) {
+            setCurrentRecord(loadedRecords[index]);
+            setCurrentIndex(index);
+          } else if (loadedRecords && loadedRecords.length > 0) {
+            // Fallback: letzter Datensatz der Seite
+            setCurrentRecord(loadedRecords[loadedRecords.length - 1]);
+            setCurrentIndex(loadedRecords.length - 1);
+          }
+        }
+      } else {
+        // Fallback: Normale Reload
+        await loadFormConfiguration();
       }
     } catch (err) {
       alert('Fehler beim Löschen des Datensatzes');
@@ -462,25 +505,68 @@ const FormProgram: React.FC = () => {
       const tableName = tables[0];
 
       if (editMode === 'add' || editMode === 'copy') {
-        await apiPost('/formprogram', {
+        const response = await apiPost('/formprogram', {
           table: tableName,
           company: selectedCompany,
           user: selectedUser,
           language_id: selectedLanguage,
           record: currentRecord
         });
+        
+        // Fehlerbehandlung
+        if (response.success === false) {
+          alert(response.message || 'Fehler beim Erstellen');
+          return;
+        }
+        
         alert('Datensatz erfolgreich erstellt');
+        
+        // Smart Jump: Backend gibt Position des neuen Datensatzes zurück
+        if (response.position) {
+          const { page, index, totalRecords } = response.position;
+          
+          // Update Pagination Info
+          setTotalRecords(totalRecords);
+          setTotalPages(Math.ceil(totalRecords / itemsPerPage));
+          setCurrentPage(page);
+          
+          // Lade Seite OHNE automatische Selektion
+          const loadedRecords = await loadRecords(page, true);
+          
+          // Selektiere den neuen Datensatz am Index vom Backend
+          if (loadedRecords && loadedRecords.length > index) {
+            setCurrentRecord(loadedRecords[index]);
+            setCurrentIndex(index);
+          }
+        } else {
+          // Fallback: Normale Reload
+          await loadFormConfiguration();
+        }
       } else if (editMode === 'update') {
         const keyFields = formConfig!.selectedFields.filter(f => f.keyfield);
         const keyParams = keyFields.map(f => `${f.fieldName}=${currentRecord[f.fieldName]}`).join('&');
 
-        await apiPatch(`/formprogram?table=${tableName}&company=${selectedCompany}&user=${selectedUser}&language_id=${selectedLanguage}&${keyParams}`, {
+        const response = await apiPatch(`/formprogram?table=${tableName}&company=${selectedCompany}&user=${selectedUser}&language_id=${selectedLanguage}&${keyParams}`, {
           record: currentRecord
         });
+        
+        // Fehlerbehandlung
+        if (response.success === false) {
+          alert(response.message || 'Fehler beim Aktualisieren');
+          return;
+        }
+        
         alert('Datensatz erfolgreich aktualisiert');
+        
+        // Nach UPDATE: Nur den aktualisierten Datensatz im Array ersetzen
+        if (response.record) {
+          const updatedRecords = [...records];
+          updatedRecords[currentIndex] = response.record;
+          setRecords(updatedRecords);
+          setCurrentRecord(response.record);
+        }
       }
 
-      await loadFormConfiguration();
       setEditMode('view');
       setIsDirty(false);
     } catch (err) {
@@ -566,6 +652,44 @@ const FormProgram: React.FC = () => {
     setIsDirty(true);
   };
 
+  const handleChangeAction = async (fieldName: string, value: any, action: string) => {
+    if (!action || !formId) return;
+    
+    try {
+      const params = new URLSearchParams({
+        function: 'change',
+        form_id: formId,
+        company: selectedCompany,
+        user: selectedUser,
+        language_id: selectedLanguage,
+        field: fieldName,
+        action: action,
+        value: String(value)
+      });
+      
+      // Key-Felder als einzelne Parameter hinzufügen (keyfield_FELDNAME=WERT)
+      formConfig?.selectedFields.filter(f => f.keyfield).forEach(keyField => {
+        if (currentRecord[keyField.fieldName] !== undefined) {
+          params.append('keyfield_' + keyField.fieldName, String(currentRecord[keyField.fieldName]));
+        }
+      });
+      
+      const data = await apiGet('/formprogram', params);
+      
+      // Backend kann neue selectOptions zurückliefern
+      if (data.selectOptions) {
+        setSelectOptions(prev => ({ ...prev, ...data.selectOptions }));
+      }
+      
+      // Backend kann auch Feldwerte aktualisieren
+      if (data.fieldUpdates) {
+        setCurrentRecord(prev => ({ ...prev, ...data.fieldUpdates }));
+      }
+    } catch (err) {
+      console.error('Change action error:', err);
+    }
+  };
+
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -623,14 +747,13 @@ const FormProgram: React.FC = () => {
     }));
   };
 
-  const handleFilterKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>, fieldName: string) => {
+  const handleFilterKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       
       // IMMER Backend-Request bei ENTER (Server-Pagination)
       const newFilters = { ...columnFiltersTemp };
       columnFiltersRef.current = newFilters;
-      setColumnFilters(newFilters);
       setCurrentPage(1);
       
       await loadRecords(1);
@@ -651,7 +774,7 @@ const FormProgram: React.FC = () => {
       }
     });
 
-    // Clientseitiges Sortieren
+    // Clientseitiges Sortieren (case-insensitive wie Backend)
     if (sortField) {
       filtered.sort((a, b) => {
         const aVal = a[sortField] ?? '';
@@ -661,11 +784,12 @@ const FormProgram: React.FC = () => {
           return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
         }
         
-        const aStr = String(aVal);
-        const bStr = String(bVal);
-        return sortDirection === 'asc' 
-          ? aStr.localeCompare(bStr) 
-          : bStr.localeCompare(aStr);
+        const aStr = String(aVal).toLowerCase();
+        const bStr = String(bVal).toLowerCase();
+        
+        if (aStr === bStr) return 0;
+        if (sortDirection === 'asc') return aStr > bStr ? 1 : -1;
+        return aStr < bStr ? 1 : -1;
       });
     }
 
@@ -676,7 +800,6 @@ const FormProgram: React.FC = () => {
     if (!searchExpanded) {
       // Beim Öffnen: Filter zurücksetzen
       columnFiltersRef.current = {};
-      setColumnFilters({});
       setColumnFiltersTemp({});
       setSearchExpanded(true);
       setTimeout(() => searchInputRef.current?.focus(), 100);
@@ -764,7 +887,12 @@ const FormProgram: React.FC = () => {
           type="checkbox"
           name={field.fieldName}
           checked={!!value}
-          onChange={(e) => handleFieldChange(field.fieldName, e.target.checked)}
+          onChange={(e) => {
+            handleFieldChange(field.fieldName, e.target.checked);
+            if (field.onChangeAction) {
+              handleChangeAction(field.fieldName, e.target.checked, field.onChangeAction);
+            }
+          }}
           onKeyDown={handleKeyDown}
           disabled={isDisabled}
           className="checkbox"
@@ -778,7 +906,12 @@ const FormProgram: React.FC = () => {
         <select
           name={field.fieldName}
           value={value}
-          onChange={(e) => handleFieldChange(field.fieldName, e.target.value)}
+          onChange={(e) => {
+            handleFieldChange(field.fieldName, e.target.value);
+            if (field.onChangeAction) {
+              handleChangeAction(field.fieldName, e.target.value, field.onChangeAction);
+            }
+          }}
           onKeyDown={handleKeyDown}
           disabled={isDisabled}
           className="select-field"
@@ -885,6 +1018,11 @@ const FormProgram: React.FC = () => {
         name={field.fieldName}
         value={value}
         onChange={(e) => handleFieldChange(field.fieldName, e.target.value)}
+        onBlur={(e) => {
+          if (field.onChangeAction) {
+            handleChangeAction(field.fieldName, e.target.value, field.onChangeAction);
+          }
+        }}
         onKeyDown={handleKeyDown}
         disabled={isDisabled}
         placeholder={field.placeholder}
@@ -898,7 +1036,7 @@ const FormProgram: React.FC = () => {
 
   if (isLoading && companies.length === 0) {
     return (
-      <BaseLayout title="Form Program" showUserInfo={true} showNavigation={false}>
+      <BaseLayout title="Form Program" showUserInfo={true} showNavigation={false} footerRight={formId}>
         <div className="container-app">
           <div className="card text-center py-12">
             <div className="spinner mx-auto mb-4"></div>
@@ -913,7 +1051,7 @@ const FormProgram: React.FC = () => {
   const hasTableView = tableFields.length > 0;
 
   return (
-    <BaseLayout title="Form Program" showUserInfo={true} showNavigation={false}>
+    <BaseLayout title="Form Program" showUserInfo={true} showNavigation={false} footerRight={formId}>
       <div className="container-app">
         <h1 className="text-3xl font-bold text-gray-800 mb-6">Form Program</h1>
 
@@ -1261,7 +1399,7 @@ const FormProgram: React.FC = () => {
                               type="text"
                               value={columnFiltersTemp[field.fieldName] || ''}
                               onChange={(e) => handleFilterChange(field.fieldName, e.target.value)}
-                              onKeyDown={(e) => handleFilterKeyDown(e, field.fieldName)}
+                              onKeyDown={handleFilterKeyDown}
                               placeholder="Filter... (Enter)"
                               className="input-field"
                               style={{ 

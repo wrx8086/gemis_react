@@ -51,6 +51,7 @@ interface Field {
   showInTable?: boolean;
   keyfield?: boolean;
   password?: boolean;
+  onChangeAction?: string;
 }
 
 const FormDesigner: React.FC = () => {
@@ -349,7 +350,8 @@ const FormDesigner: React.FC = () => {
         separator: field.separator ?? false,
         showInTable: field.showInTable ?? false,
         keyfield: field.keyfield ?? false,
-        password: field.password ?? false
+        password: field.password ?? false,
+        onChangeAction: field.onChangeAction
       };
     });
 
@@ -983,6 +985,34 @@ const FormDesigner: React.FC = () => {
                               />
                               <label className="label" style={{ marginBottom: 0 }}>Passwort-Feld (maskierte Eingabe)</label>
                             </div>
+
+                            <div className="fd-flex-center fd-flex-gap-sm">
+                              <input
+                                type="checkbox"
+                                checked={!!field.onChangeAction}
+                                onChange={(e) => updateFieldSettings(field.uniqueId, { 
+                                  onChangeAction: e.target.checked ? '' : undefined 
+                                })}
+                                className="checkbox"
+                              />
+                              <label className="label" style={{ marginBottom: 0 }}>onChange Action (bei Änderung)</label>
+                            </div>
+                            
+                            {field.onChangeAction !== undefined && (
+                              <div className="fd-form-group">
+                                <label className="label">Action Name:</label>
+                                <input
+                                  type="text"
+                                  value={field.onChangeAction || ''}
+                                  onChange={(e) => updateFieldSettings(field.uniqueId, { onChangeAction: e.target.value })}
+                                  placeholder="z.B. loadSalutations, updatePrices..."
+                                  className="input-field"
+                                />
+                                <small style={{ color: 'var(--color-gray-500)', fontSize: '11px' }}>
+                                  API-Call: function=change&field={field.fieldName}&action=...
+                                </small>
+                              </div>
+                            )}
 
                             <button
                               onClick={() => setEditingField(null)}
