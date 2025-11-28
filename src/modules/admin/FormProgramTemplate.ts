@@ -15,7 +15,7 @@ export const generateFormProgramCode = (config: {
 import {
   Save, Plus, Copy, Trash2, X,
   ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight,
-  Edit2, AlertCircle, ArrowUp, ArrowDown, Search
+  Edit2, AlertCircle, ArrowUp, ArrowDown, Search, FilterX
 } from 'lucide-react';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../../shared/api/apiClient';
 import BaseLayout from '../../components/layout/BaseLayout';
@@ -41,6 +41,7 @@ const ${config.componentName} = () => {
   const [selectOptionsFix, setSelectOptionsFix] = useState({});
   const [searchExpanded, setSearchExpanded] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [isFiltered, setIsFiltered] = useState(false);
   const searchTermRef = useRef('');
   const [columnFiltersTemp, setColumnFiltersTemp] = useState({});
   const columnFiltersRef = useRef({});
@@ -61,74 +62,142 @@ const ${config.componentName} = () => {
   const skipNextLoadRef = useRef(false);
   const [keyfieldValues, setKeyfieldValues] = useState({});
   const keyfieldValuesRef = useRef({});
+  const currentRecordRef = useRef({});
+  const currentIndexRef = useRef(0);
+
+  // Refs synchron halten mit State
+  useEffect(() => {
+    currentRecordRef.current = currentRecord;
+    currentIndexRef.current = currentIndex;
+  }, [currentRecord, currentIndex]);
 
   // Keyboard Navigation für Tabelle (↑↓)
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (mutationMode !== 'view' || records.length === 0) return;
-      
-      // Nur reagieren wenn kein Input fokussiert ist
       const activeElement = document.activeElement;
-      if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT')) {
+      const isInInput = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT');
+      
+      // ESC: Suchfeld schließen wenn offen
+      if (e.key === 'Escape' && searchExpanded) {
+        e.preventDefault();
+        setSearchExpanded(false);
         return;
       }
+      
+      // ESC: Abbruch im Edit/Add/Copy-Modus
+      if (e.key === 'Escape' && mutationMode !== 'view') {
+        e.preventDefault();
+        // Cancel-Logik direkt ausführen
+        if (isDirty && !confirm('Änderungen verwerfen?')) return;
+        if (mutationMode === 'add' || mutationMode === 'copy') {
+          if (records.length > 0) setCurrentRecord(records[currentIndexRef.current]);
+          else setCurrentRecord({});
+        } else {
+          setCurrentRecord(records[currentIndexRef.current]);
+        }
+        setMutationMode('view');
+        setIsDirty(false);
+        return;
+      }
+      
+      // Ab hier nur View-Modus
+      if (mutationMode !== 'view' || records.length === 0) return;
+      
+      // Nicht reagieren wenn Input fokussiert ist oder Suchfeld offen
+      if (isInInput || searchExpanded) return;
       
       const filteredRecords = getFilteredAndSortedRecords();
       if (filteredRecords.length === 0) return;
       
-      if (e.key === 'ArrowDown') {
+      if (e.key === 'Enter') {
         e.preventDefault();
-        // Finde aktuellen Index in gefilterten Records
+        // In Edit-Modus wechseln mit aktuellem Datensatz aus Ref
+        setCurrentRecord(currentRecordRef.current);
+        setCurrentIndex(currentIndexRef.current);
+        setMutationMode('edit');
+        setTimeout(() => {
+          const firstEditableField = FORM_CONFIG.find(f => f.editable && !f.hidden && !f.keyfield);
+          if (firstEditableField && inputRefs.current[firstEditableField.uniqueId]) {
+            inputRefs.current[firstEditableField.uniqueId].focus();
+          }
+        }, 50);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        // Finde aktuellen Index in gefilterten Records (aus Ref für Aktualität)
         const currentFilteredIndex = filteredRecords.findIndex(r => {
           const keyFields = FORM_CONFIG.filter(f => f.keyfield);
-          return keyFields.every(kf => r[kf.fieldName] === currentRecord[kf.fieldName]);
+          return keyFields.every(kf => r[kf.fieldName] === currentRecordRef.current[kf.fieldName]);
         });
         
         if (currentFilteredIndex < filteredRecords.length - 1) {
           const nextRecord = filteredRecords[currentFilteredIndex + 1];
-          setCurrentRecord(nextRecord);
+          // Refs SYNCHRON aktualisieren
+          currentRecordRef.current = nextRecord;
           // Finde Index im Original-Array
           const originalIndex = records.findIndex(r => {
             const keyFields = FORM_CONFIG.filter(f => f.keyfield);
             return keyFields.every(kf => r[kf.fieldName] === nextRecord[kf.fieldName]);
           });
+          currentIndexRef.current = originalIndex;
+          // State aktualisieren
+          setCurrentRecord(nextRecord);
           setCurrentIndex(originalIndex);
           
-          // Scroll zur Zeile
+          // Scroll zur Zeile und Focus setzen
           setTimeout(() => {
             const keyFields = FORM_CONFIG.filter(f => f.keyfield);
             const rowId = keyFields.map(kf => nextRecord[kf.fieldName]).join('-');
             const rowElement = document.getElementById(\`row-\${rowId}\`);
             if (rowElement) {
-              rowElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+              const tableScroll = rowElement.closest('.table-scroll');
+              if (tableScroll) {
+                const rowTop = rowElement.offsetTop;
+                const containerHeight = tableScroll.clientHeight;
+                const rowHeight = rowElement.offsetHeight;
+                const targetScroll = rowTop - (containerHeight / 2) + (rowHeight / 2);
+                tableScroll.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+              }
+              rowElement.focus();
             }
           }, 10);
         }
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        // Finde aktuellen Index in gefilterten Records
+        // Finde aktuellen Index in gefilterten Records (aus Ref für Aktualität)
         const currentFilteredIndex = filteredRecords.findIndex(r => {
           const keyFields = FORM_CONFIG.filter(f => f.keyfield);
-          return keyFields.every(kf => r[kf.fieldName] === currentRecord[kf.fieldName]);
+          return keyFields.every(kf => r[kf.fieldName] === currentRecordRef.current[kf.fieldName]);
         });
         
         if (currentFilteredIndex > 0) {
           const prevRecord = filteredRecords[currentFilteredIndex - 1];
-          setCurrentRecord(prevRecord);
+          // Refs SYNCHRON aktualisieren
+          currentRecordRef.current = prevRecord;
           // Finde Index im Original-Array
           const originalIndex = records.findIndex(r => {
             const keyFields = FORM_CONFIG.filter(f => f.keyfield);
             return keyFields.every(kf => r[kf.fieldName] === prevRecord[kf.fieldName]);
           });
+          currentIndexRef.current = originalIndex;
+          // State aktualisieren
+          setCurrentRecord(prevRecord);
           setCurrentIndex(originalIndex);
           
-          // Scroll zur Zeile
+          // Scroll zur Zeile und Focus setzen
           setTimeout(() => {
             const keyFields = FORM_CONFIG.filter(f => f.keyfield);
             const rowId = keyFields.map(kf => prevRecord[kf.fieldName]).join('-');
             const rowElement = document.getElementById(\`row-\${rowId}\`);
             if (rowElement) {
-              rowElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+              const tableScroll = rowElement.closest('.table-scroll');
+              if (tableScroll) {
+                const rowTop = rowElement.offsetTop;
+                const containerHeight = tableScroll.clientHeight;
+                const rowHeight = rowElement.offsetHeight;
+                const targetScroll = rowTop - (containerHeight / 2) + (rowHeight / 2);
+                tableScroll.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+              }
+              rowElement.focus();
             }
           }, 10);
         }
@@ -137,7 +206,7 @@ const ${config.componentName} = () => {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mutationMode, records, currentRecord, columnFiltersTemp, sortField, sortDirection]);
+  }, [mutationMode, records, columnFiltersTemp, sortField, sortDirection, isDirty, searchExpanded]);
 
   useEffect(() => { 
     if (!isInitialized) {
@@ -371,7 +440,7 @@ const ${config.componentName} = () => {
               const rowId = keyFields.map(kf => newRecord[kf.fieldName]).join('-');
               const rowElement = document.getElementById(\`row-\${rowId}\`);
               if (rowElement) {
-                rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                scrollToRow(rowElement);
               }
             }, 50);
           }
@@ -463,7 +532,7 @@ const ${config.componentName} = () => {
               const rowId = keyFields.map(kf => selectedRecord[kf.fieldName]).join('-');
               const rowElement = document.getElementById(\`row-\${rowId}\`);
               if (rowElement) {
-                rowElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                scrollToRow(rowElement);
               }
             }, 50);
           }
@@ -649,13 +718,19 @@ const ${config.componentName} = () => {
       columnFiltersRef.current = {};
       setColumnFiltersTemp({});
       setSearchExpanded(true);
-      setTimeout(() => searchInputRef.current?.focus(), 100);
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          searchInputRef.current.select();
+        }
+      }, 100);
     } else {
       // Beim Schließen: Suche zurücksetzen und alle Daten laden
       setSearchExpanded(false);
       if (searchTermRef.current) {
         searchTermRef.current = '';
         setSearchTerm('');
+        setIsFiltered(false);
         setCurrentPage(1);
         loadRecords(1);
       }
@@ -666,10 +741,117 @@ const ${config.componentName} = () => {
     if (e.key !== 'Enter') return;
     e.preventDefault();
     
-    // Ref aktualisieren und Backend-Request
-    searchTermRef.current = searchTerm;
+    // Bei leerem Suchfeld: Filter zurücksetzen
+    const trimmedSearch = searchTerm.trim();
+    searchTermRef.current = trimmedSearch;
     setCurrentPage(1);
-    await loadRecords(1);
+    const loadedRecords = await loadRecords(1);
+    
+    if (loadedRecords && loadedRecords.length > 0) {
+      // Datensätze gefunden -> Suchfeld schließen, Filter-Status setzen
+      setSearchExpanded(false);
+      setIsFiltered(trimmedSearch !== '');
+    } else {
+      // Keine Datensätze -> Suchfeld offen lassen, Text markieren
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          searchInputRef.current.select();
+        }
+      }, 50);
+    }
+  };
+
+  const handleClearFilter = async () => {
+    // Filter zurücksetzen
+    searchTermRef.current = '';
+    setSearchTerm('');
+    setIsFiltered(false);
+    
+    try {
+      setIsLoading(true);
+      
+      // API-Call mit rebuild und Keyfields des aktuellen Datensatzes
+      const params = new URLSearchParams({
+        formId: FORM_ID,
+        function: 'rebuild',
+        limit: String(itemsPerPage)
+      });
+      
+      // Keyfields des aktuellen Datensatzes mitgeben
+      FORM_CONFIG.filter(f => f.keyfield).forEach(field => {
+        const value = currentRecordRef.current[field.fieldName];
+        if (value !== undefined && value !== '') {
+          params.append('keyfield_' + field.fieldName, String(value));
+        }
+      });
+      
+      const data = await apiGet('/dynamic-form', params);
+      
+      // SelectOptions aktualisieren falls vorhanden
+      if (data.selectOptionsFix) setSelectOptionsFix(data.selectOptionsFix);
+      if (data.selectOptions) setSelectOptions(data.selectOptions);
+      
+      if (data.records && Array.isArray(data.records)) {
+        // Records setzen
+        setRecords(data.records);
+        setTotalRecords(data.maxRecords || data.records.length);
+        setTotalPages(data.pageCount || Math.ceil((data.maxRecords || data.records.length) / itemsPerPage));
+        
+        // Position verarbeiten
+        if (data.position) {
+          const { page, index } = data.position;
+          
+          skipNextLoadRef.current = true;
+          setCurrentPage(page);
+          
+          // Selektiere den Datensatz am Index vom Backend
+          if (data.records.length > index) {
+            const record = data.records[index];
+            currentRecordRef.current = record;
+            currentIndexRef.current = index;
+            setCurrentRecord(record);
+            setCurrentIndex(index);
+            
+            // Scroll zur Zeile
+            setTimeout(() => {
+              const keyFields = FORM_CONFIG.filter(f => f.keyfield);
+              const rowId = keyFields.map(kf => record[kf.fieldName]).join('-');
+              const rowElement = document.getElementById(\`row-\${rowId}\`);
+              if (rowElement) {
+                scrollToRow(rowElement);
+                rowElement.focus();
+              }
+            }, 50);
+          }
+        } else if (data.records.length > 0) {
+          // Kein Position-Objekt: ersten Datensatz selektieren
+          currentRecordRef.current = data.records[0];
+          currentIndexRef.current = 0;
+          setCurrentRecord(data.records[0]);
+          setCurrentIndex(0);
+        }
+      }
+    } catch (err) {
+      setError(\`Fehler beim Rebuild: \${err instanceof Error ? err.message : 'Unbekannt'}\`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Hilfsfunktion: Scroll zur Zeile mit Header-Offset
+  const scrollToRow = (rowElement) => {
+    const tableScroll = rowElement?.closest('.table-scroll');
+    if (tableScroll && rowElement) {
+      const headerHeight = 40; // Höhe des sticky Headers
+      const rowTop = rowElement.offsetTop;
+      const containerHeight = tableScroll.clientHeight;
+      const rowHeight = rowElement.offsetHeight;
+      
+      // Scroll so dass Zeile in der Mitte ist, aber mit Header-Offset
+      const targetScroll = rowTop - (containerHeight / 2) + (rowHeight / 2);
+      tableScroll.scrollTo({ top: Math.max(0, targetScroll), behavior: 'smooth' });
+    }
   };
 
   const handleRowClick = (record) => {
@@ -679,8 +861,44 @@ const ${config.componentName} = () => {
       return keyFields.every(kf => r[kf.fieldName] === record[kf.fieldName]);
     });
     if (index !== -1) {
+      // Refs SYNCHRON aktualisieren
+      currentRecordRef.current = record;
+      currentIndexRef.current = index;
+      // State aktualisieren
       setCurrentIndex(index);
       setCurrentRecord(record);
+    }
+  };
+
+  const handleRowDoubleClick = (record) => {
+    if (mutationMode !== 'view') return;
+    // Record direkt setzen
+    const index = records.findIndex(r => {
+      const keyFields = FORM_CONFIG.filter(f => f.keyfield);
+      return keyFields.every(kf => r[kf.fieldName] === record[kf.fieldName]);
+    });
+    if (index !== -1) {
+      // Refs SYNCHRON aktualisieren
+      currentRecordRef.current = record;
+      currentIndexRef.current = index;
+      // State aktualisieren
+      setCurrentIndex(index);
+      setCurrentRecord(record);
+    }
+    // In Edit-Modus wechseln und erstes editierbares Feld fokussieren
+    setMutationMode('edit');
+    setTimeout(() => {
+      const firstEditableField = FORM_CONFIG.find(f => f.editable && !f.hidden && !f.keyfield);
+      if (firstEditableField && inputRefs.current[firstEditableField.uniqueId]) {
+        inputRefs.current[firstEditableField.uniqueId].focus();
+      }
+    }, 50);
+  };
+
+  const handleRowKeyDown = (e, record) => {
+    if (e.key === 'Enter' && mutationMode === 'view') {
+      e.preventDefault();
+      handleRowDoubleClick(record);
     }
   };
 
@@ -745,6 +963,20 @@ const ${config.componentName} = () => {
           -moz-appearance: textfield;
         }
         
+        /* Inaktive Datensätze rot anzeigen */
+        .table-row-inactive {
+          color: var(--color-error, #dc2626);
+        }
+        .table-row-inactive td {
+          color: var(--color-error, #dc2626);
+        }
+        
+        /* Focus-Style für Tabellenzeilen */
+        .table-scroll tbody tr:focus {
+          outline: 2px solid var(--color-primary, #3b82f6);
+          outline-offset: -2px;
+        }
+        
         .table-scroll { 
           max-height: 250px; 
           overflow-y: auto; 
@@ -757,9 +989,6 @@ const ${config.componentName} = () => {
           background: white; 
           z-index: 10;
           box-shadow: 0 1px 0 0 var(--color-gray-300);
-        }
-        .table-scroll tbody tr {
-          scroll-margin-top: 80px;
         }
         .table-scroll::-webkit-scrollbar {
           width: 8px;
@@ -812,6 +1041,15 @@ const ${config.componentName} = () => {
                       className="input-field"
                       style={{ width: '250px', transition: 'width 0.3s ease' }}
                     />
+                  )}
+                  {isFiltered && !searchExpanded && (
+                    <button 
+                      onClick={handleClearFilter} 
+                      className="btn btn-warning flex items-center gap-2" 
+                      title="Filter aufheben"
+                    >
+                      <FilterX className="w-4 h-4" />
+                    </button>
                   )}
                 </>
               ) : (
@@ -1024,12 +1262,16 @@ const ${config.componentName} = () => {
                       const isCurrentRecord = FORM_CONFIG.filter(f => f.keyfield).every(kf => record[kf.fieldName] === currentRecord[kf.fieldName]);
                       const keyFields = FORM_CONFIG.filter(f => f.keyfield);
                       const rowId = keyFields.map(kf => record[kf.fieldName]).join('-');
+                      const isInactive = record.active === false;
                       return (
                         <tr 
                           key={index} 
                           id={\`row-\${rowId}\`}
+                          tabIndex={0}
                           onClick={() => handleRowClick(record)} 
-                          className={\`cursor-pointer hover:bg-gray-50 \${isCurrentRecord && mutationMode === 'view' ? 'table-row-active' : ''}\`}
+                          onDoubleClick={() => handleRowDoubleClick(record)}
+                          onKeyDown={(e) => handleRowKeyDown(e, record)}
+                          className={\`cursor-pointer hover:bg-gray-50 \${isCurrentRecord && mutationMode === 'view' ? 'table-row-active' : ''} \${isInactive ? 'table-row-inactive' : ''}\`}
                         >
                           {tableFields.map(field => (
                             <td key={field.uniqueId} style={{ textAlign: field.align || 'left' }}>

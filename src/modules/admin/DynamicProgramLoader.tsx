@@ -8,7 +8,7 @@ import { useSession } from '../../contexts/SessionContext';
 import {
   Save, Plus, Copy, Trash2, X,
   ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight,
-  Edit2, AlertCircle, ArrowUp, ArrowDown, Search, Code
+  Edit2, AlertCircle, ArrowUp, ArrowDown, Search, Code, FilterX
 } from 'lucide-react';
 
 const DynamicProgramLoader: React.FC = () => {
@@ -154,6 +154,7 @@ const DynamicProgramLoader: React.FC = () => {
         'ArrowDown',
         'Search',
         'Code',
+        'FilterX',
         transpiledCode + '\nreturn ' + componentName + ';'
       );
 
@@ -185,7 +186,8 @@ const DynamicProgramLoader: React.FC = () => {
         ArrowUp,
         ArrowDown,
         Search,
-        Code
+        Code,
+        FilterX
       );
 
       return CompiledComponent;
