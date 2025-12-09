@@ -234,7 +234,7 @@ const DynamicProgramLoader: React.FC = () => {
     );
   }
 
-  return <Component />;
+  return <Component key={programName} />;
 };
 
 export default DynamicProgramLoader;

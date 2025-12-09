@@ -73,14 +73,43 @@
   --color-level3-border: #a855f7;
   --color-level3-hover: #f3e8ff;
   
-  /* Abstände */
-  --spacing-xs: 0.25rem;      /* 4px */
-  --spacing-sm: 0.5rem;       /* 8px */
-  --spacing-md: 1rem;         /* 16px */
-  --spacing-lg: 1.5rem;       /* 24px */
-  --spacing-xl: 2rem;         /* 32px */
-  --spacing-2xl: 3rem;        /* 48px */
-  --spacing-3xl: 4rem;        /* 64px */
+  /* -------------------------------------------------------------------------
+     Abstände (Spacing) - 50% kompakter als Original
+     -------------------------------------------------------------------------
+     Variable        Wert      Verwendung
+     -------------------------------------------------------------------------
+     --spacing-xs    2px       Feinste Details: Label-Margins, kleine Gaps,
+                               Checkbox-Gaps, Form-Separator
+     
+     --spacing-sm    4.5px     Kleine Elemente: Button-Gaps (Icon+Text),
+                               Toolbar-Padding, Form-Fields-Container Gap
+     
+     --spacing-md    9px       Standard: Form-Row Gap/Margin, Card-Footer Gap,
+                               Table-Footer Gap, Alert Padding/Margin
+     
+     --spacing-lg    13.5px    Grössere Bereiche: Form-Group Margin,
+                               Card-Header/Body/Footer Padding, Nav-Link Padding
+     
+     --spacing-xl    18px      Grosse Bereiche: Modal-Footer Padding,
+                               Container (responsive)
+     
+     --spacing-2xl   27px      Sections: Grosse Abstände zwischen Sektionen
+     
+     --spacing-3xl   36px      Maximum: Login-Container, Hero-Bereiche
+     -------------------------------------------------------------------------
+     WICHTIG: Interaktive Elemente verwenden FESTE Werte für Lesbarkeit:
+     - Buttons:       0.5rem 1rem (8px 16px)
+     - Inputs/Select: 0.375rem 0.625rem (6px 10px)
+     - Table th:      0.375rem 0.75rem (6px 12px)
+     - Table td:      0.25rem 0.75rem (4px 12px)
+     ------------------------------------------------------------------------- */
+  --spacing-xs: 0.14rem;      /* 2px */
+  --spacing-sm: 0.28rem;      /* 4.5px */
+  --spacing-md: 0.56rem;      /* 9px */
+  --spacing-lg: 0.84rem;      /* 13.5px */
+  --spacing-xl: 1.125rem;     /* 18px */
+  --spacing-2xl: 1.69rem;     /* 27px */
+  --spacing-3xl: 2.25rem;     /* 36px */
   
   /* Border Radius */
   --radius-sm: 0.25rem;       /* 4px */
@@ -172,13 +201,6 @@ body {
     padding-left: var(--spacing-xl);
     padding-right: var(--spacing-xl);
   }
-}
-
-/* ERP Container */
-.erp-container {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: var(--spacing-md);
 }
 
 /* Page Container */
@@ -463,31 +485,6 @@ body {
   text-align: right;
 }
 
-/* ERP Header */
-.erp-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: calc(var(--spacing-md) * 1.5);
-  padding-bottom: var(--spacing-md);
-  border-bottom: 2px solid var(--color-gray-200);
-}
-
-.erp-header h1 {
-  font-size: 1.875rem;
-  font-weight: 700;
-  color: var(--color-gray-900);
-  margin: 0;
-}
-
-@media (max-width: 768px) {
-  .erp-header {
-    flex-direction: column;
-    gap: var(--spacing-md);
-    align-items: stretch;
-  }
-}
-
 /* ============================================================================
    Navigation
    ============================================================================ */
@@ -567,7 +564,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: var(--spacing-sm);
-  padding: 0.625rem 1.5rem;
+  padding: 0.5rem 1rem;  /* Feste Werte für lesbare Buttons */
   font-size: var(--font-base);
   font-weight: var(--font-medium);
   line-height: 1.25;
@@ -645,6 +642,17 @@ body {
   box-shadow: var(--shadow-md);
 }
 
+.btn-info {
+  background-color: var(--color-info);
+  color: white;
+}
+
+.btn-info:hover:not(:disabled) {
+  background-color: var(--color-info-hover);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
 .btn-outline {
   background-color: white;
   color: var(--color-gray-700);
@@ -667,74 +675,22 @@ body {
 
 /* Button Sizes */
 .btn-sm {
-  padding: 0.375rem 1rem;
+  padding: 0.25rem 0.5rem;  /* Kleine Buttons */
   font-size: var(--font-sm);
 }
 
 .btn-lg {
-  padding: 0.75rem 2rem;
+  padding: 0.75rem 1.5rem;  /* Grosse Buttons */
   font-size: var(--font-lg);
 }
 
 .btn-xl {
-  padding: 1rem 2.5rem;
+  padding: 1rem 2rem;  /* Extra grosse Buttons */
   font-size: var(--font-xl);
 }
 
 .btn-full-width {
   width: 100%;
-}
-
-/* ERP Buttons (compatibility) */
-.erp-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.625rem 1.25rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: var(--radius-lg);
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.erp-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-md);
-}
-
-.erp-btn-primary {
-  background: var(--color-primary);
-  color: white;
-}
-
-.erp-btn-primary:hover {
-  background: var(--color-primary-hover);
-}
-
-.erp-btn-secondary {
-  background: var(--color-secondary);
-  color: white;
-}
-
-.erp-btn-secondary:hover {
-  background: var(--color-secondary-hover);
-}
-
-.erp-btn-danger {
-  background: var(--color-danger);
-  color: white;
-}
-
-.erp-btn-danger:hover {
-  background: #dc2626;
-}
-
-.erp-btn-sm {
-  padding: 0.375rem 0.75rem;
-  font-size: 0.75rem;
 }
 
 /* ============================================================================
@@ -780,15 +736,6 @@ body {
   gap: var(--spacing-md);
 }
 
-/* ERP Card (compatibility) */
-.erp-card {
-  background: white;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-md);
-  padding: var(--spacing-md);
-  margin-bottom: var(--spacing-md);
-}
-
 /* ============================================================================
    Tables
    ============================================================================ */
@@ -812,7 +759,7 @@ body {
 }
 
 .table th {
-  padding: 0.5rem 0.75rem;
+  padding: 0.375rem 0.75rem;  /* Lesbare Tabellen-Header */
   text-align: left;
   font-weight: var(--font-semibold);
   color: var(--color-gray-700);
@@ -821,7 +768,7 @@ body {
 }
 
 .table td {
-  padding: 0.5rem 0.75rem;
+  padding: 0.25rem 0.75rem;  /* Kompakte Tabellen-Zellen */
   border-bottom: 1px solid var(--color-gray-200);
   color: var(--color-gray-900);
 }
@@ -848,45 +795,146 @@ body {
   cursor: pointer;
 }
 
-/* ERP Table (compatibility) */
-.erp-table {
+/* Color-Feature für Tabellenzeilen (FormProgram) */
+.table-row-red {
+  background-color: var(--color-danger-light, #fee2e2) !important;
+  color: var(--color-danger-dark, #991b1b);
+}
+.table-row-red td {
+  color: var(--color-danger-dark, #991b1b);
+}
+
+.table-row-green {
+  background-color: var(--color-success-light, #dcfce7) !important;
+  color: var(--color-success-dark, #166534);
+}
+.table-row-green td {
+  color: var(--color-success-dark, #166534);
+}
+
+.table-row-yellow {
+  background-color: var(--color-warning-light, #fef3c7) !important;
+  color: #854d0e;
+}
+.table-row-yellow td {
+  color: #854d0e;
+}
+
+.table-row-blue {
+  background-color: var(--color-info-light, #dbeafe) !important;
+  color: var(--color-primary-dark, #1e40af);
+}
+.table-row-blue td {
+  color: var(--color-primary-dark, #1e40af);
+}
+
+/* Table Footer (FormProgram - Pagination, Filter, Record Count) */
+.table-footer {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-top: 1px solid var(--color-gray-200);
+  background-color: var(--color-gray-50);
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.table-footer-left {
+  justify-self: start;
+}
+
+.table-footer-center {
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  align-items: center;
+}
+
+.table-footer-right {
+  justify-self: end;
+  font-size: 13px;
+  color: var(--color-gray-600);
+}
+
+/* FormProgram Toolbar */
+.form-toolbar {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+.form-toolbar-buttons {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--spacing-sm);
   width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
 }
 
-.erp-table thead {
-  background: var(--color-gray-50);
-  border-bottom: 2px solid var(--color-gray-200);
+/* FormProgram Felder-Container */
+.form-fields-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  align-items: flex-start;
+  width: 100%;
 }
 
-.erp-table th {
-  padding: 0.75rem 1rem;
-  text-align: left;
-  font-weight: 600;
-  color: var(--color-gray-900);
+/* FormProgram Separator */
+.form-separator {
+  flex-basis: 100%;
+  border: none;
+  border-top: 1px solid var(--color-gray-300);
+  margin: var(--spacing-sm) 0;
+}
+
+/* Pagination Buttons */
+.btn-pagination {
+  padding: 0.25rem 0.5rem !important;
+}
+
+.btn-pagination-number {
+  padding: 0.25rem 0.75rem !important;
+  min-width: 36px;
+}
+
+.pagination-ellipsis {
+  padding: 0.25rem 0.5rem;
+  display: flex;
+  align-items: center;
+}
+
+.pagination-info {
+  padding: 0 0.75rem;
+  font-size: var(--font-sm);
+  color: var(--color-gray-600);
   white-space: nowrap;
 }
 
-.erp-table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--color-gray-200);
-  color: var(--color-gray-900);
+/* Table Filter */
+.table-filter-cell {
+  padding: var(--spacing-xs) !important;
 }
 
-.erp-table tbody tr:hover {
-  background: var(--color-gray-50);
+.table-filter-input {
+  width: 100%;
+  font-size: 12px !important;
+  padding: var(--spacing-xs) var(--spacing-sm) !important;
+  min-width: 80px;
 }
 
-@media (max-width: 768px) {
-  .erp-table {
-    font-size: 0.75rem;
-  }
-  
-  .erp-table th,
-  .erp-table td {
-    padding: 0.5rem;
-  }
+/* Active Filter Select */
+.active-filter-select {
+  padding: var(--spacing-xs) var(--spacing-sm) !important;
+  font-size: 13px;
+  width: auto;
+}
+
+/* Record Counter (single record navigation) */
+.record-counter {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--spacing-md);
+  font-size: 14px;
 }
 
 /* ============================================================================
@@ -901,8 +949,8 @@ body {
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.2rem;           /* 20% kleiner: war 1.5rem */
-  margin-bottom: 1.2rem; /* 20% kleiner: war 1.5rem */
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
 }
 
 @media (max-width: 768px) {
@@ -929,7 +977,7 @@ body {
 /* Input Fields */
 .input-field {
   width: 100%;
-  padding: 0.5rem 0.75rem;  /* 20% niedriger: war 0.625rem */
+  padding: 0.375rem 0.625rem;  /* Lesbare Input-Felder */
   font-size: var(--font-base);
   color: var(--color-gray-900);
   background-color: white;
@@ -957,7 +1005,7 @@ body {
 /* Select Fields */
 .select-field {
   width: 100%;
-  padding: 0.5rem 0.75rem;  /* 20% niedriger: war 0.625rem */
+  padding: 0.375rem 0.625rem;  /* Lesbare Select-Felder */
   font-size: var(--font-base);
   color: var(--color-gray-900);
   background-color: white;
@@ -982,7 +1030,7 @@ body {
 /* Textarea */
 .textarea-field {
   width: 100%;
-  padding: 0.5rem 0.75rem;  /* 20% niedriger: war 0.625rem */
+  padding: var(--spacing-xs) var(--spacing-sm);
   font-size: var(--font-base);
   font-family: var(--font-sans);
   color: var(--color-gray-900);
@@ -1066,65 +1114,6 @@ body {
   cursor: pointer;
 }
 
-/* ERP Form (compatibility) */
-.erp-form-group {
-  margin-bottom: 1rem;
-}
-
-.erp-form-group label {
-  display: block;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--color-gray-900);
-  margin-bottom: 0.5rem;
-}
-
-.erp-form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.erp-input,
-.erp-select,
-.erp-textarea {
-  width: 100%;
-  padding: 0.625rem 0.875rem;
-  font-size: 0.875rem;
-  border: 1px solid var(--color-gray-200);
-  border-radius: var(--radius-lg);
-  transition: all 0.2s;
-}
-
-.erp-input:focus,
-.erp-select:focus,
-.erp-textarea:focus {
-  outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-}
-
-.erp-checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-  user-select: none;
-}
-
-.erp-checkbox-label input[type="checkbox"] {
-  width: 1rem;
-  height: 1rem;
-  cursor: pointer;
-}
-
-@media (max-width: 768px) {
-  .erp-form-row {
-    grid-template-columns: 1fr;
-  }
-}
-
 /* ============================================================================
    Modals
    ============================================================================ */
@@ -1198,76 +1187,6 @@ body {
   border-top: 1px solid var(--color-gray-200);
 }
 
-/* ERP Modal (compatibility) */
-.erp-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: var(--spacing-md);
-}
-
-.erp-modal {
-  background: white;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  max-width: 600px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.erp-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid var(--color-gray-200);
-}
-
-.erp-modal-header h2 {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: var(--color-gray-900);
-  margin: 0;
-}
-
-.erp-modal-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--color-gray-600);
-  padding: 0.25rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.25rem;
-  transition: all 0.2s;
-}
-
-.erp-modal-close:hover {
-  background: var(--color-gray-50);
-  color: var(--color-gray-900);
-}
-
-.erp-modal-body {
-  padding: 1.5rem;
-}
-
-.erp-modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  padding: 1.5rem;
-  border-top: 1px solid var(--color-gray-200);
-}
-
 /* ============================================================================
    Badges
    ============================================================================ */
@@ -1313,41 +1232,6 @@ body {
 .badge-gray {
   background-color: var(--color-gray-200);
   color: var(--color-gray-700);
-}
-
-/* ERP Badges (compatibility) */
-.erp-badge {
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  border-radius: 9999px;
-  white-space: nowrap;
-}
-
-.erp-badge-primary {
-  background: #dbeafe;
-  color: var(--color-primary);
-}
-
-.erp-badge-secondary {
-  background: #f1f5f9;
-  color: var(--color-secondary);
-}
-
-.erp-badge-success {
-  background: #d1fae5;
-  color: var(--color-success);
-}
-
-.erp-badge-danger {
-  background: #fee2e2;
-  color: var(--color-danger);
-}
-
-.erp-badge-warning {
-  background: #fef3c7;
-  color: var(--color-warning);
 }
 
 /* ============================================================================
@@ -1418,14 +1302,6 @@ body {
   font-size: var(--font-lg);
 }
 
-/* ERP Loading (compatibility) */
-.erp-loading {
-  text-align: center;
-  padding: 3rem;
-  color: var(--color-gray-600);
-  font-size: 1.125rem;
-}
-
 /* ============================================================================
    Search Components
    ============================================================================ */
@@ -1458,25 +1334,6 @@ body {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
-/* ERP Search (compatibility) */
-.erp-search {
-  position: relative;
-  margin-bottom: var(--spacing-md);
-}
-
-.erp-search input {
-  width: 100%;
-  padding: 0.625rem 0.875rem 0.625rem 2.5rem;
-}
-
-.erp-search-icon {
-  position: absolute;
-  left: 0.75rem;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--color-gray-600);
-}
-
 /* ============================================================================
    Filters
    ============================================================================ */
@@ -1487,17 +1344,6 @@ body {
   margin-bottom: var(--spacing-lg);
   padding: var(--spacing-md);
   background-color: var(--color-gray-100);
-  border-radius: var(--radius-lg);
-}
-
-/* ERP Filters (compatibility) */
-.erp-filters {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: var(--spacing-md);
-  padding: 1rem;
-  background: var(--color-gray-50);
   border-radius: var(--radius-lg);
 }
 
@@ -1516,12 +1362,6 @@ body {
 
 .action-buttons-end {
   justify-content: flex-end;
-}
-
-/* ERP Action Buttons (compatibility) */
-.erp-action-buttons {
-  display: flex;
-  gap: 0.5rem;
 }
 
 /* ============================================================================
@@ -2685,15 +2525,15 @@ body {
   cursor: pointer;
 }
 
-/* Form Row (horizontal layout) */
-.form-row {
+/* Form Row Flex (horizontal layout with flexible items) */
+.form-row-flex {
   display: flex;
   gap: var(--spacing-md);
   align-items: flex-end;
   flex-wrap: wrap;
 }
 
-.form-group {
+.form-row-flex .form-group {
   flex: 1;
   min-width: 200px;
 }

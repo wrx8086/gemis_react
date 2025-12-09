@@ -60,6 +60,13 @@ const addSessionHeaders = (headers: HeadersInit): HeadersInit => {
     }
   }
   
+  // Debug: Was wird gesendet?
+  console.log('API Session Headers:', {
+    session_token: session?.session_token,
+    company: session?.company,
+    user_name: session?.user_name
+  });
+  
   if (session) {
     const h = headers as Record<string, string>;
     

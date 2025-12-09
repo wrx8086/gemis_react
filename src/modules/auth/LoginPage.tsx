@@ -102,16 +102,24 @@ const LoginPage: React.FC = () => {
       if (response.ok && data.success) {
         localStorage.setItem('lastUserName', user_name);
         
-        // ✅ FIX: Backend liefert session_token, nicht session_id
-        const sessionToken = data.session_token || data.session_id || '';
+        // Backend gibt session-Daten verschachtelt zurück: data.session.session_token
+        const sessionData = data.session || data;
+        
+        // Session-Token aus verschiedenen möglichen Feldnamen holen
+        const sessionToken = sessionData.session_token || sessionData.sessionToken || data.session_token || data.token || '';
+        
+        // Debug: Was kommt vom Backend?
+        console.log('Login Response:', data);
+        console.log('Session Data:', sessionData);
+        console.log('Session Token:', sessionToken);
         
         // Session-Daten im Context speichern - MIT session_token!
         setSession({
           session_token: sessionToken,
-          company: selectedCompany,
-          user_name: user_name,
-          display_name: data.display_name || user_name,
-          language_id: data.language_id || '1',
+          company: sessionData.company || selectedCompany,
+          user_name: sessionData.user_name || user_name,
+          display_name: sessionData.display_name || user_name,
+          language_id: sessionData.language_id || 1,
           labels: data.labels
         });
 

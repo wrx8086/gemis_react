@@ -72,20 +72,6 @@ interface SelectOptions {
   [fieldName: string]: SelectOption[];
 }
 
-interface Labels {
-  btn_new: string;
-  btn_edit: string;
-  btn_copy: string;
-  btn_delete: string;
-  btn_save: string;
-  btn_cancel: string;
-  btn_first: string;
-  btn_previous: string;
-  btn_next: string;
-  btn_last: string;
-  form_load: string;
-}
-
 type EditMode = 'view' | 'add' | 'update' | 'copy' | 'delete';
 
 const FormProgram: React.FC = () => {
@@ -105,18 +91,9 @@ const FormProgram: React.FC = () => {
   const [selectOptionsFix, setSelectOptionsFix] = useState<SelectOptions>({});
   const [selectOptions, setSelectOptions] = useState<SelectOptions>({});
   
-  const labels: Labels = session?.labels || {
-    btn_new: 'Neu',
-    btn_edit: 'Bearbeiten',
-    btn_copy: 'Kopieren',
-    btn_delete: 'Löschen',
-    btn_save: 'Speichern',
-    btn_cancel: 'Abbrechen',
-    btn_first: 'Erster Datensatz',
-    btn_previous: 'Vorheriger Datensatz',
-    btn_next: 'Nächster Datensatz',
-    btn_last: 'Letzter Datensatz',
-    form_load: 'Formular laden'
+  // Labels aus Session via getLabel (mit Fallback)
+  const getLabel = (key: string, fallback: string): string => {
+    return session?.labels?.[key] || fallback;
   };
   
   const [records, setRecords] = useState<RecordData[]>([]);
@@ -1057,7 +1034,7 @@ const FormProgram: React.FC = () => {
 
         <div className="card mb-6">
           <div className="card-header">
-            <h2>{labels.form_load}</h2>
+            <h2>{getLabel('BTN_LOAD', 'Laden')}</h2>
           </div>
           <div className="card-body">
             <div className="form-row">
@@ -1126,7 +1103,7 @@ const FormProgram: React.FC = () => {
             <div className="form-row">
               <div className="form-group">
                 <button onClick={loadFormConfiguration} className="btn btn-primary">
-                  {labels.form_load}
+                  {getLabel('BTN_LOAD', 'Laden')}
                 </button>
               </div>
               <div className="form-group">
@@ -1172,19 +1149,19 @@ const FormProgram: React.FC = () => {
                     <>
                       <button onClick={handleAdd} className="btn btn-success flex items-center gap-2">
                         <Plus className="w-4 h-4" />
-                        {labels.btn_new}
+                        {getLabel('BTN_NEW', 'Neu')}
                       </button>
                       <button onClick={handleUpdate} className="btn btn-primary flex items-center gap-2" disabled={records.length === 0}>
                         <Edit2 className="w-4 h-4" />
-                        {labels.btn_edit}
+                        {getLabel('BTN_EDIT', 'Bearbeiten')}
                       </button>
                       <button onClick={handleCopy} className="btn btn-info flex items-center gap-2" disabled={records.length === 0}>
                         <Copy className="w-4 h-4" />
-                        {labels.btn_copy}
+                        {getLabel('BTN_COPY', 'Kopieren')}
                       </button>
                       <button onClick={handleDelete} className="btn btn-danger flex items-center gap-2" disabled={records.length === 0}>
                         <Trash2 className="w-4 h-4" />
-                        {labels.btn_delete}
+                        {getLabel('BTN_DELETE', 'Löschen')}
                       </button>
                       
                       <div className="flex items-center gap-2 ml-4">
@@ -1219,11 +1196,11 @@ const FormProgram: React.FC = () => {
                     <>
                       <button onClick={handleSave} className="btn btn-primary flex items-center gap-2">
                         <Save className="w-4 h-4" />
-                        {labels.btn_save}
+                        {getLabel('BTN_SAVE', 'Speichern')}
                       </button>
                       <button onClick={handleCancel} className="btn btn-secondary flex items-center gap-2">
                         <X className="w-4 h-4" />
-                        {labels.btn_cancel}
+                        {getLabel('BTN_CANCEL', 'Abbrechen')}
                       </button>
                     </>
                   )}
@@ -1325,7 +1302,7 @@ const FormProgram: React.FC = () => {
                       onClick={handleFirst}
                       disabled={currentIndex === 0 || records.length === 0}
                       className="btn btn-secondary"
-                      title={labels.btn_first}
+                      title={getLabel('BTN_FIRST', 'Erste')}
                     >
                       <ChevronsLeft className="w-4 h-4" />
                     </button>
@@ -1333,7 +1310,7 @@ const FormProgram: React.FC = () => {
                       onClick={handlePrevious}
                       disabled={currentIndex === 0 || records.length === 0}
                       className="btn btn-secondary"
-                      title={labels.btn_previous}
+                      title={getLabel('BTN_PREVIOUS', 'Vorherige')}
                     >
                       <ChevronLeft className="w-4 h-4" />
                     </button>
@@ -1341,7 +1318,7 @@ const FormProgram: React.FC = () => {
                       onClick={handleNext}
                       disabled={currentIndex >= records.length - 1 || records.length === 0}
                       className="btn btn-secondary"
-                      title={labels.btn_next}
+                      title={getLabel('BTN_NEXT', 'Nächste')}
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
@@ -1349,7 +1326,7 @@ const FormProgram: React.FC = () => {
                       onClick={handleLast}
                       disabled={currentIndex >= records.length - 1 || records.length === 0}
                       className="btn btn-secondary"
-                      title={labels.btn_last}
+                      title={getLabel('BTN_LAST', 'Letzte')}
                     >
                       <ChevronsRight className="w-4 h-4" />
                     </button>

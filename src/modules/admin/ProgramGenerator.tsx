@@ -12,6 +12,8 @@ interface FormConfig {
   targetUser?: string;
   targetLanguageId?: string;
   targetCompany?: string;
+  itemsPerPage?: number;
+  tableMaxHeight?: string;
 }
 
 const ProgramGenerator: React.FC = () => {
@@ -45,7 +47,38 @@ const ProgramGenerator: React.FC = () => {
       });
 
       const data = await apiGet('/formprogram', params);
-      const config: FormConfig = data;
+      
+      // Debug: Was kommt vom Backend?
+      console.log('Backend Response für getformconfig:', data);
+      
+      // Flexibel: Daten können direkt oder verschachtelt sein
+      let config: FormConfig;
+      if (data.config) {
+        // Verschachtelt: { config: { formTitle, formId, selectedFields } }
+        config = data.config;
+      } else if (data.result) {
+        // Alternative Verschachtelung: { result: { ... } }
+        config = data.result;
+      } else {
+        // Direkt: { formTitle, formId, selectedFields }
+        config = data;
+      }
+
+      // Validierung: Sind formTitle und formId vorhanden?
+      if (!config.formTitle || !config.formId) {
+        console.error('Backend Response fehlt formTitle oder formId:', config);
+        alert(`Fehler: Backend hat keine gültige Konfiguration zurückgegeben.\n\nformTitle: ${config.formTitle}\nformId: ${config.formId}\n\nBitte prüfen Sie die Form-Konfiguration im FormDesigner.`);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Validierung: Sind Felder vorhanden?
+      if (!config.selectedFields || config.selectedFields.length === 0) {
+        console.error('Backend Response hat keine Felder:', config);
+        alert('Fehler: Keine Felder in der Konfiguration gefunden.\n\nBitte prüfen Sie die Form-Konfiguration im FormDesigner.');
+        setIsLoading(false);
+        return;
+      }
 
       const company = config.targetCompany || '1000';
       const user = config.targetUser || 'Admin';
@@ -70,6 +103,7 @@ const ProgramGenerator: React.FC = () => {
       setProgramName(componentName);
     } catch (err) {
       console.error('Generate Error:', err);
+      alert(`Fehler beim Generieren: ${err instanceof Error ? err.message : 'Unbekannt'}`);
     }
     setIsLoading(false);
   };

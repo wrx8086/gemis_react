@@ -8,7 +8,7 @@ import FormDesignerStandalone from './modules/form-designer/FormDesignerStandalo
 import Dashboard from './modules/dashboard/Dashboard';
 import GenericPage from './modules/common/GenericPage';
 import MenuDesigner from './modules/admin/MenuDesigner';
-import UserManagement from './modules/admin/UserManagement';
+// import UserManagement from './modules/admin/_UserManagement';
 import FormProgram from './modules/admin/FormProgram';
 import TabSystemDemo from './modules/demo/TabSystemDemo';
 import ProgramGenerator from './modules/admin/ProgramGenerator';
@@ -47,8 +47,6 @@ const AppContent = () => {
         
         {/* Dynamic Programs - Query Parameter Version */}
         <Route path="/dynamic" element={<DynamicProgramLoader />} />
-
-        <Route path="/users" element={<UserManagement />} />
 
         {/* FormDesigner mit Session (innerhalb des Systems) */}
         <Route path="/formdesigner" element={<FormDesigner />} />

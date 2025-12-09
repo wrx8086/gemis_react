@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 export interface MenuItem {
   menu_id: string;
@@ -16,19 +16,7 @@ export interface SessionData {
   display_name?: string;
   language_id?: number;
   menu?: MenuItem[];
-  labels?: {
-    btn_new: string;
-    btn_edit: string;
-    btn_copy: string;
-    btn_delete: string;
-    btn_save: string;
-    btn_cancel: string;
-    btn_first: string;
-    btn_previous: string;
-    btn_next: string;
-    btn_last: string;
-    form_load: string;
-  };
+  labels?: Record<string, string>;
 }
 
 interface SessionContextType {
@@ -36,6 +24,7 @@ interface SessionContextType {
   setSession: (data: SessionData | null) => void;
   clearSession: () => void;
   isAuthenticated: () => boolean;
+  getLabel: (key: string, params?: Record<string, string | number>) => string;
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -91,6 +80,13 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Session setzen und in sessionStorage speichern
   const setSession = (data: SessionData | null) => {
     if (data) {
+      // Debug: Was wird gespeichert?
+      console.log('SessionContext setSession:', {
+        session_token: data.session_token,
+        company: data.company,
+        user_name: data.user_name
+      });
+      
       // In State speichern
       setSessionState(data);
 
@@ -137,13 +133,28 @@ export const SessionProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return !!(session?.company && session?.user_name);
   };
 
+  // Label aus Session holen mit optionalen Parametern
+  const getLabel = useCallback((key: string, params?: Record<string, string | number>): string => {
+    let text = session?.labels?.[key] || key;
+    
+    // Parameter ersetzen: {current} -> 5, {total} -> 20
+    if (params) {
+      Object.entries(params).forEach(([param, value]) => {
+        text = text.replace(new RegExp(`\\{${param}\\}`, 'g'), String(value));
+      });
+    }
+    
+    return text;
+  }, [session?.labels]);
+
   return (
     <SessionContext.Provider
       value={{
         session,
         setSession,
         clearSession,
-        isAuthenticated
+        isAuthenticated,
+        getLabel
       }}
     >
       {children}

@@ -66,6 +66,8 @@ const FormDesigner: React.FC = () => {
 
   const [formTitle, setFormTitle] = useState<string>('');
   const [formId, setFormId] = useState<string>('');
+  const [itemsPerPage, setItemsPerPage] = useState<number>(50);
+  const [tableMaxHeight, setTableMaxHeight] = useState<string>('250px');
 
   const [searchTerm, setSearchTerm] = useState<string>('');
 
@@ -268,6 +270,8 @@ const FormDesigner: React.FC = () => {
         setSelectedFields(normalizedFields);
         setFormTitle(data.formTitle || '');
         setFormId(data.formId || '');
+        setItemsPerPage(data.itemsPerPage || 50);
+        setTableMaxHeight(data.tableMaxHeight || '250px');
       }
     } catch (error) {
       alert('Fehler beim Laden der ausgewählten Konfiguration');
@@ -363,6 +367,8 @@ const FormDesigner: React.FC = () => {
       config: {
         formTitle,
         formId,
+        itemsPerPage,
+        tableMaxHeight,
         selectedFields: normalizedFields
       }
     };
@@ -383,6 +389,8 @@ const FormDesigner: React.FC = () => {
       tables: tablesInput,
       formTitle,
       formId,
+      itemsPerPage,
+      tableMaxHeight,
       selectedFields: selectedFields
     };
 
@@ -639,18 +647,18 @@ const FormDesigner: React.FC = () => {
                 <h2>Formular-Details</h2>
               </div>
               <div className="card-body">
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label className="form-label">Formular-Titel</label>
-                    <input
-                      type="text"
-                      value={formTitle}
-                      onChange={(e) => setFormTitle(e.target.value)}
-                      placeholder="z.B. Kundendaten erfassen"
-                      className="input-field"
-                    />
-                  </div>
-                  <div className="form-group">
+                <div className="form-group">
+                  <label className="form-label">Formular-Titel</label>
+                  <input
+                    type="text"
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                    placeholder="z.B. Kundendaten erfassen"
+                    className="input-field"
+                  />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '16px', marginTop: '16px', alignItems: 'end' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
                     <label className="form-label">Formular-ID</label>
                     <input
                       type="text"
@@ -659,6 +667,36 @@ const FormDesigner: React.FC = () => {
                       placeholder="z.B. customer-form-001"
                       className="input-field"
                     />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Datensätze/Seite</label>
+                    <input
+                      type="number"
+                      value={itemsPerPage}
+                      onChange={(e) => setItemsPerPage(Math.max(1, parseInt(e.target.value) || 50))}
+                      min="1"
+                      max="500"
+                      className="input-field"
+                      style={{ width: '100px' }}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label">Tabellenhöhe</label>
+                    <select
+                      value={tableMaxHeight}
+                      onChange={(e) => setTableMaxHeight(e.target.value)}
+                      className="select-field"
+                      style={{ width: '180px' }}
+                    >
+                      <option value="150px">Klein (150px)</option>
+                      <option value="200px">Mittel-Klein (200px)</option>
+                      <option value="250px">Mittel (250px)</option>
+                      <option value="300px">Mittel-Gross (300px)</option>
+                      <option value="400px">Gross (400px)</option>
+                      <option value="500px">Sehr gross (500px)</option>
+                      <option value="50vh">Halbe Bildschirmhöhe (50vh)</option>
+                      <option value="70vh">70% Bildschirmhöhe (70vh)</option>
+                    </select>
                   </div>
                 </div>
               </div>
