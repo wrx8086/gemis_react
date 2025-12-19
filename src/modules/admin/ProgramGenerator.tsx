@@ -28,8 +28,21 @@ const ProgramGenerator: React.FC = () => {
 
   useEffect(() => {
     const urlFormId = searchParams.get('formId');
+    const urlUser = searchParams.get('user');
+    const urlCompany = searchParams.get('company');
+    const urlLanguageId = searchParams.get('language_id');
+    
     if (urlFormId) {
       setFormId(urlFormId);
+    }
+    if (urlUser) {
+      setTargetUser(urlUser);
+    }
+    if (urlCompany) {
+      setTargetCompany(urlCompany);
+    }
+    if (urlLanguageId) {
+      setTargetLanguageId(urlLanguageId);
     }
   }, [searchParams]);
 
@@ -40,9 +53,9 @@ const ProgramGenerator: React.FC = () => {
     try {
       const params = new URLSearchParams({
         function: 'getformconfig',
-        company: '1000',
-        user: 'Admin',
-        language_id: '1',
+        company: targetCompany || '1000',
+        user: targetUser || 'admin',
+        language_id: targetLanguageId || '1',
         form_id: formId
       });
 
@@ -169,7 +182,7 @@ const ProgramGenerator: React.FC = () => {
 
         <div className="card mb-6">
           <div className="card-header">
-            <h2>Schritt 1: Formular-ID eingeben</h2>
+            <h2>Schritt 1: Formular-Konfiguration</h2>
           </div>
           <div className="card-body">
             <div className="form-row">
@@ -184,6 +197,36 @@ const ProgramGenerator: React.FC = () => {
                 />
               </div>
               <div className="form-group">
+                <label className="form-label">Firma</label>
+                <input
+                  type="text"
+                  value={targetCompany}
+                  onChange={(e) => setTargetCompany(e.target.value)}
+                  className="input-field"
+                  placeholder="z.B. 1000"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Benutzer</label>
+                <input
+                  type="text"
+                  value={targetUser}
+                  onChange={(e) => setTargetUser(e.target.value)}
+                  className="input-field"
+                  placeholder="z.B. admin"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Sprache-ID</label>
+                <input
+                  type="text"
+                  value={targetLanguageId}
+                  onChange={(e) => setTargetLanguageId(e.target.value)}
+                  className="input-field"
+                  placeholder="z.B. 1"
+                />
+              </div>
+              <div className="form-group" style={{ alignSelf: 'flex-end' }}>
                 <button onClick={generateCode} className="btn btn-primary" disabled={isLoading}>
                   Code generieren
                 </button>

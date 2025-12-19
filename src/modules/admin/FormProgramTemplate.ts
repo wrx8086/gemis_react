@@ -45,6 +45,7 @@ const ${config.componentName} = () => {
   const [activeFilter, setActiveFilter] = useState('all'); // 'all', 'activeOnly', 'inactiveOnly'
   const activeFilterRef = useRef('all');
   const [hasActiveField, setHasActiveField] = useState(false); // Wird von init gesetzt
+  const [showSearch, setShowSearch] = useState(true); // Wird von init gesetzt (lSearch)
   const searchTermRef = useRef('');
   const [columnFiltersTemp, setColumnFiltersTemp] = useState({});
   const columnFiltersRef = useRef({});
@@ -60,6 +61,7 @@ const ${config.componentName} = () => {
   const [hiddenFields, setHiddenFields] = useState([]);     // Dynamisch versteckte Felder
   const [messageBox, setMessageBox] = useState(null);       // MessageBox State
   const messageBoxResolveRef = useRef(null);                // Promise-Resolver für MessageBox
+  const messageBoxButtonRef = useRef(null);                 // Ref für primären Button (Fokus)
   
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50); // Default 50, kann von init überschrieben werden
@@ -67,6 +69,7 @@ const ${config.componentName} = () => {
   const [tableMaxHeight, setTableMaxHeight] = useState('250px'); // Default 250px, kann von init überschrieben werden
   const [totalRecords, setTotalRecords] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [recordCount, setRecordCount] = useState(0); // Anzahl Records im aktuellen Dataset
   
   const inputRefs = useRef({});
   const searchInputRef = useRef(null);
@@ -95,7 +98,7 @@ const ${config.componentName} = () => {
       setMessageBox({
         type: config.type || 'info',
         title: config.title || '',
-        text: config.text || config.messageId ? getLabel(config.messageId, config.params) : '',
+        text: config.text || (config.messageId ? getLabel(config.messageId, config.params) : ''),
         params: config.params
       });
     });
@@ -127,6 +130,9 @@ const ${config.componentName} = () => {
   // Keyboard Navigation für Tabelle (↑↓)
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Wenn MessageBox offen ist, nicht reagieren (MessageBox hat eigene Handler)
+      if (messageBox) return;
+      
       const activeElement = document.activeElement;
       const isInInput = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT');
       const isInFilterInput = isInInput && activeElement.closest('thead');
@@ -298,7 +304,7 @@ const ${config.componentName} = () => {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mutationMode, records, columnFiltersTemp, sortField, sortDirection, isDirty, searchExpanded]);
+  }, [mutationMode, records, columnFiltersTemp, sortField, sortDirection, isDirty, searchExpanded, messageBox]);
 
   useEffect(() => { 
     if (!isInitialized) {
@@ -322,6 +328,15 @@ const ${config.componentName} = () => {
       loadRecords();
     }
   }, [sortField, sortDirection]);
+
+  // MessageBox: Fokus auf primären Button setzen
+  useEffect(() => {
+    if (messageBox && messageBoxButtonRef.current) {
+      setTimeout(() => {
+        messageBoxButtonRef.current?.focus();
+      }, 50);
+    }
+  }, [messageBox]);
 
   const loadInit = async () => {
     try {
@@ -347,6 +362,13 @@ const ${config.componentName} = () => {
       // hasActiveField vom Backend laden (ob Tabelle ein active-Feld hat)
       if (data.hasActiveField !== undefined) {
         setHasActiveField(data.hasActiveField);
+      }
+      
+      // showSearch vom Backend laden (ob Suchfeld angezeigt wird)
+      if (data.lSearch !== undefined) {
+        setShowSearch(data.lSearch);
+      } else if (data.showSearch !== undefined) {
+        setShowSearch(data.showSearch);
       }
       
       // itemsPerPage vom Backend laden (Anzahl Datensätze pro Seite)
@@ -438,12 +460,25 @@ const ${config.componentName} = () => {
       if (data.selectOptions) setSelectOptions(data.selectOptions);
       
       if (data.records && Array.isArray(data.records)) {
-        setRecords(data.records);
-        setTotalRecords(data.maxRecords || data.records.length);
-        setTotalPages(data.pageCount || Math.ceil((data.maxRecords || data.records.length) / itemsPerPageRef.current));
+        const recCount = data.recordCount !== undefined ? data.recordCount : data.records.length;
         
-        // Nur automatisch selektieren wenn nicht skipSelect
-        if (!skipSelect && data.records.length > 0) {
+        setRecords(data.records);
+        setRecordCount(recCount);
+        setTotalRecords(data.maxRecords || data.totalRecords || data.records.length);
+        setTotalPages(data.pageCount || data.totalPages || Math.ceil((data.maxRecords || data.records.length) / itemsPerPageRef.current));
+        
+        // Seite vom Backend übernehmen (falls vorhanden)
+        if (data.currentPage !== undefined) {
+          setCurrentPage(data.currentPage);
+        } else if (data.page !== undefined) {
+          setCurrentPage(data.page);
+        }
+        
+        // Index vom Backend übernehmen (falls vorhanden), sonst Standard-Logik
+        if (data.currentIndex !== undefined && data.records[data.currentIndex]) {
+          setCurrentIndex(data.currentIndex);
+          setCurrentRecord(data.records[data.currentIndex]);
+        } else if (!skipSelect && recCount > 0) {
           setCurrentRecord(data.records[0]);
           setCurrentIndex(0);
         }
@@ -452,12 +487,14 @@ const ${config.componentName} = () => {
         return data.records;
       } else {
         setRecords([]);
+        setRecordCount(0);
         if (!skipSelect) {
           setCurrentRecord({});
           setCurrentIndex(0);
         }
         setTotalRecords(0);
         setTotalPages(0);
+        setCurrentPage(1);
         setIsLoading(false);
         return [];
       }
@@ -563,9 +600,11 @@ const ${config.componentName} = () => {
           setTotalRecords(totalRecords);
           setTotalPages(Math.ceil(totalRecords / itemsPerPageRef.current));
           
-          // Verhindere dass useEffect nochmal loadRecords aufruft
-          skipNextLoadRef.current = true;
-          setCurrentPage(page);
+          // Verhindere dass useEffect nochmal loadRecords aufruft (nur wenn Seite sich ändert)
+          if (page !== currentPage) {
+            skipNextLoadRef.current = true;
+            setCurrentPage(page);
+          }
           
           // Lade Seite OHNE automatische Selektion
           const loadedRecords = await loadRecords(page, true);
@@ -617,6 +656,31 @@ const ${config.componentName} = () => {
           setRecords(updatedRecords);
           setCurrentRecord(response.record);
         }
+        
+        // Backend kann eine Frage stellen (z.B. "Datensatz aktivieren?")
+        if (response.askQuestion) {
+          const questionResult = await showMessage(response.askQuestion);
+          if (questionResult === 'yes' && response.askQuestion.fieldUpdate) {
+            // Bei "Ja": Felder aus fieldUpdate in Record übernehmen und normalen Update senden
+            const updatedRecord = { ...currentRecord, ...response.askQuestion.fieldUpdate };
+            
+            const updateParams = new URLSearchParams({
+              formId: FORM_ID,
+              function: 'update'
+            });
+            const updateResponse = await apiPatch(\`/dynamic-form?\${updateParams.toString()}\`, { 
+              record: updatedRecord
+            });
+            
+            // Aktualisierten Record übernehmen
+            if (updateResponse.record) {
+              const updatedRecords = [...records];
+              updatedRecords[currentIndex] = updateResponse.record;
+              setRecords(updatedRecords);
+              setCurrentRecord(updateResponse.record);
+            }
+          }
+        }
       }
       
       setMutationMode('view');
@@ -640,7 +704,9 @@ const ${config.componentName} = () => {
     try {
       const params = new URLSearchParams({
         formId: FORM_ID,
-        function: 'delete'
+        function: 'delete',
+        page: String(currentPage),
+        index: String(currentIndex)
       });
       const response = await apiDelete(\`/dynamic-form?\${params.toString()}\`, { record: currentRecord });
       
@@ -662,13 +728,16 @@ const ${config.componentName} = () => {
         setTotalRecords(totalRecords);
         setTotalPages(Math.ceil(totalRecords / itemsPerPageRef.current));
         
-        // Verhindere dass useEffect nochmal loadRecords aufruft
-        skipNextLoadRef.current = true;
-        setCurrentPage(page);
+        // Verhindere dass useEffect nochmal loadRecords aufruft (nur wenn Seite sich ändert)
+        if (page !== currentPage) {
+          skipNextLoadRef.current = true;
+          setCurrentPage(page);
+        }
         
         if (totalRecords === 0) {
           // Keine Datensätze mehr
           setRecords([]);
+          setRecordCount(0);
           setCurrentRecord({});
           setCurrentIndex(0);
         } else {
@@ -754,15 +823,15 @@ const ${config.componentName} = () => {
       const params = new URLSearchParams({
         formId: FORM_ID,
         function: 'change',
-        field: fieldName,
-        action: action,
-        value: String(value)
+        changedField: fieldName,
+        changedValue: String(value)
       });
       
-      // Key-Felder als einzelne Parameter hinzufügen (keyfield_FELDNAME=WERT)
-      FORM_CONFIG.filter(f => f.keyfield).forEach(keyField => {
-        if (currentRecord[keyField.fieldName] !== undefined) {
-          params.append('keyfield_' + keyField.fieldName, String(currentRecord[keyField.fieldName]));
+      // Alle aktuellen Feldwerte als Query-Parameter hinzufügen
+      FORM_CONFIG.forEach(field => {
+        const fieldValue = currentRecord[field.fieldName];
+        if (fieldValue !== undefined && fieldValue !== null) {
+          params.append(field.fieldName, String(fieldValue));
         }
       });
       
@@ -852,7 +921,20 @@ const ${config.componentName} = () => {
     setColumnFiltersTemp(prev => ({ ...prev, [fieldName]: value }));
   };
 
-  const handleFilterKeyDown = async (e) => {
+  // Filter-Focus: Wert vom aktuellen Datensatz vorschlagen und markieren
+  const handleFilterFocus = (e, fieldName) => {
+    const currentValue = currentRecord[fieldName];
+    if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
+      const stringValue = String(currentValue);
+      setColumnFiltersTemp(prev => ({ ...prev, [fieldName]: stringValue }));
+      // Text komplett markieren nach kurzer Verzögerung (damit React den Wert setzt)
+      setTimeout(() => {
+        e.target.select();
+      }, 0);
+    }
+  };
+
+  const handleFilterKeyDown = async (e, fieldName) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
@@ -864,6 +946,18 @@ const ${config.componentName} = () => {
       
       // Direkt laden - die ref ist bereits aktualisiert
       await loadRecords(1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      
+      // Filter-Inhalt für dieses Feld löschen
+      setColumnFiltersTemp(prev => ({ ...prev, [fieldName]: '' }));
+      
+      // Fokus zurück zur Tabelle (aktuell selektierte Zeile)
+      const activeRow = document.getElementById(\`row-\${currentIndex}\`);
+      if (activeRow) {
+        activeRow.focus();
+      }
     }
   };
 
@@ -985,37 +1079,56 @@ const ${config.componentName} = () => {
       if (data.selectOptions) setSelectOptions(data.selectOptions);
       
       if (data.records && Array.isArray(data.records)) {
+        const recCount = data.recordCount !== undefined ? data.recordCount : data.records.length;
+        
         // Records setzen
         setRecords(data.records);
+        setRecordCount(recCount);
         setTotalRecords(data.maxRecords || data.records.length);
         setTotalPages(data.pageCount || Math.ceil((data.maxRecords || data.records.length) / itemsPerPageRef.current));
         
-        // Position verarbeiten
-        if (data.position) {
-          const { page, index } = data.position;
-          
+        // Seite vom Backend übernehmen (falls vorhanden)
+        const newPage = data.currentPage ?? data.position?.page ?? currentPage;
+        
+        // WICHTIG: skipNextLoadRef nur setzen wenn sich die Seite tatsächlich ändert
+        // Sonst wird useEffect nicht getriggert und skipNextLoadRef bleibt true
+        if (newPage !== currentPage) {
           skipNextLoadRef.current = true;
-          setCurrentPage(page);
+          setCurrentPage(newPage);
+        }
+        
+        // Index vom Backend übernehmen
+        if (data.currentIndex !== undefined && data.records[data.currentIndex]) {
+          currentRecordRef.current = data.records[data.currentIndex];
+          currentIndexRef.current = data.currentIndex;
+          setCurrentRecord(data.records[data.currentIndex]);
+          setCurrentIndex(data.currentIndex);
           
-          // Selektiere den Datensatz am Index vom Backend
-          if (data.records.length > index) {
-            const record = data.records[index];
-            currentRecordRef.current = record;
-            currentIndexRef.current = index;
-            setCurrentRecord(record);
-            setCurrentIndex(index);
-            
-            // Scroll zur Zeile
-            setTimeout(() => {
-              const rowElement = document.getElementById(\`row-\${index}\`);
-              if (rowElement) {
-                scrollToRow(rowElement);
-                rowElement.focus();
-              }
-            }, 50);
-          }
-        } else if (data.records.length > 0) {
-          // Kein Position-Objekt: ersten Datensatz selektieren
+          // Scroll zur Zeile
+          setTimeout(() => {
+            const rowElement = document.getElementById(\`row-\${data.currentIndex}\`);
+            if (rowElement) {
+              scrollToRow(rowElement);
+              rowElement.focus();
+            }
+          }, 50);
+        } else if (data.position?.index !== undefined && data.records[data.position.index]) {
+          // Fallback: Position-Objekt
+          const index = data.position.index;
+          currentRecordRef.current = data.records[index];
+          currentIndexRef.current = index;
+          setCurrentRecord(data.records[index]);
+          setCurrentIndex(index);
+          
+          setTimeout(() => {
+            const rowElement = document.getElementById(\`row-\${index}\`);
+            if (rowElement) {
+              scrollToRow(rowElement);
+              rowElement.focus();
+            }
+          }, 50);
+        } else if (recCount > 0) {
+          // Kein Index: ersten Datensatz selektieren
           currentRecordRef.current = data.records[0];
           currentIndexRef.current = 0;
           setCurrentRecord(data.records[0]);
@@ -1294,20 +1407,24 @@ const ${config.componentName} = () => {
                     <Trash2 className="w-4 h-4" />
                     Löschen
                   </button>
-                  <button onClick={handleSearchToggle} className="btn btn-secondary flex items-center gap-2" title="Suche">
-                    <Search className="w-4 h-4" />
-                  </button>
-                  {searchExpanded && (
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      onKeyDown={handleSearchSubmit}
-                      placeholder="Suche... (Enter)"
-                      className="input-field"
-                      style={{ width: '250px', transition: 'width 0.3s ease' }}
-                    />
+                  {showSearch && (
+                    <>
+                      <button onClick={handleSearchToggle} className="btn btn-secondary flex items-center gap-2" title="Suche">
+                        <Search className="w-4 h-4" />
+                      </button>
+                      {searchExpanded && (
+                        <input
+                          ref={searchInputRef}
+                          type="text"
+                          value={searchTerm}
+                          onChange={(e) => setSearchTerm(e.target.value)}
+                          onKeyDown={handleSearchSubmit}
+                          placeholder="Suche... (Enter)"
+                          className="input-field"
+                          style={{ width: '250px', transition: 'width 0.3s ease' }}
+                        />
+                      )}
+                    </>
                   )}
                   {isFiltered && !searchExpanded && (
                     <button 
@@ -1475,7 +1592,7 @@ const ${config.componentName} = () => {
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <span className="record-counter">
-                  {getLabel('LBL_RECORD_OF', { current: currentIndex + 1, total: records.length })}
+                  {getLabel('LBL_RECORD_OF', { current: currentIndex + 1, total: recordCount })}
                 </span>
                 <button 
                   onClick={() => { if (currentIndex < records.length - 1) { setCurrentIndex(currentIndex + 1); setCurrentRecord(records[currentIndex + 1]); } }}
@@ -1522,7 +1639,8 @@ const ${config.componentName} = () => {
                           type="text"
                           value={columnFiltersTemp[field.fieldName] || ''}
                           onChange={(e) => handleFilterChange(field.fieldName, e.target.value)}
-                          onKeyDown={handleFilterKeyDown}
+                          onKeyDown={(e) => handleFilterKeyDown(e, field.fieldName)}
+                          onFocus={(e) => handleFilterFocus(e, field.fieldName)}
                           placeholder="Filter... (Enter)"
                           className="input-field table-filter-input"
                           onClick={(e) => e.stopPropagation()}
@@ -1538,7 +1656,12 @@ const ${config.componentName} = () => {
                     getFilteredAndSortedRecords().map((record, index) => {
                       // Object-Referenz-Vergleich für korrekte Selektion
                       const isCurrentRecord = record === currentRecord;
-                      const isInactive = record.active === false;
+                      
+                      // Inaktiv-Check: verschiedene Feldnamen und Werte unterstützen
+                      const isInactive = record.active === false || record.active === 0 || record.active === '0' ||
+                                        record.is_active === false || record.is_active === 0 || record.is_active === '0' ||
+                                        record.deleted === true || record.deleted === 1 || record.deleted === '1';
+                      
                       // Color-Feature: inaktive immer rot, sonst aus color-Feld
                       const rowColor = isInactive ? 'red' : (record.color || '');
                       const colorClass = rowColor && ['red', 'green', 'yellow', 'blue'].includes(rowColor) 
@@ -1646,7 +1769,19 @@ const ${config.componentName} = () => {
       
       {/* MessageBox */}
       {messageBox && (
-        <div className="message-box-overlay">
+        <div 
+          className="message-box-overlay"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              // Escape = sekundäre Aktion (Abbrechen/Nein)
+              if (messageBox.type === 'info') closeMessageBox('ok');
+              else if (messageBox.type === 'confirm') closeMessageBox('cancel');
+              else if (messageBox.type === 'yesno' || messageBox.type === 'question') closeMessageBox('no');
+              else if (messageBox.type === 'yesnocancel') closeMessageBox('cancel');
+            }
+          }}
+        >
           <div className="message-box">
             <div className="message-box-header">
               {messageBox.title}
@@ -1656,7 +1791,7 @@ const ${config.componentName} = () => {
             </div>
             <div className="message-box-footer">
               {messageBox.type === 'info' && (
-                <button className="btn btn-primary" onClick={() => closeMessageBox('ok')}>
+                <button className="btn btn-primary" onClick={() => closeMessageBox('ok')} ref={messageBoxButtonRef}>
                   {getLabel('BTN_OK')}
                 </button>
               )}
@@ -1665,7 +1800,7 @@ const ${config.componentName} = () => {
                   <button className="btn btn-secondary" onClick={() => closeMessageBox('cancel')}>
                     {getLabel('BTN_CANCEL')}
                   </button>
-                  <button className="btn btn-primary" onClick={() => closeMessageBox('ok')}>
+                  <button className="btn btn-primary" onClick={() => closeMessageBox('ok')} ref={messageBoxButtonRef}>
                     {getLabel('BTN_OK')}
                   </button>
                 </>
@@ -1675,7 +1810,17 @@ const ${config.componentName} = () => {
                   <button className="btn btn-secondary" onClick={() => closeMessageBox('no')}>
                     {getLabel('BTN_NO')}
                   </button>
-                  <button className="btn btn-primary" onClick={() => closeMessageBox('yes')}>
+                  <button className="btn btn-primary" onClick={() => closeMessageBox('yes')} ref={messageBoxButtonRef}>
+                    {getLabel('BTN_YES')}
+                  </button>
+                </>
+              )}
+              {messageBox.type === 'question' && (
+                <>
+                  <button className="btn btn-secondary" onClick={() => closeMessageBox('no')}>
+                    {getLabel('BTN_NO')}
+                  </button>
+                  <button className="btn btn-success" onClick={() => closeMessageBox('yes')} ref={messageBoxButtonRef}>
                     {getLabel('BTN_YES')}
                   </button>
                 </>
@@ -1688,7 +1833,7 @@ const ${config.componentName} = () => {
                   <button className="btn btn-danger" onClick={() => closeMessageBox('no')}>
                     {getLabel('BTN_NO')}
                   </button>
-                  <button className="btn btn-primary" onClick={() => closeMessageBox('yes')}>
+                  <button className="btn btn-primary" onClick={() => closeMessageBox('yes')} ref={messageBoxButtonRef}>
                     {getLabel('BTN_YES')}
                   </button>
                 </>

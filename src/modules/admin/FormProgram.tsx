@@ -119,6 +119,7 @@ const FormProgram: React.FC = () => {
   const [itemsPerPage] = useState<number>(50);
   const [totalRecords, setTotalRecords] = useState<number>(0);
   const [totalPages, setTotalPages] = useState<number>(0);
+  const [recordCount, setRecordCount] = useState<number>(0); // Anzahl Records im aktuellen Dataset
 
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -321,13 +322,26 @@ const FormProgram: React.FC = () => {
       let loadedRecords: RecordData[] = [];
 
       if (data.records && Array.isArray(data.records)) {
+        const recCount = data.recordCount !== undefined ? data.recordCount : data.records.length;
+        
         loadedRecords = data.records;
         setRecords(data.records);
-        setTotalRecords(data.maxRecords || data.records.length);
-        setTotalPages(data.pageCount || Math.ceil((data.maxRecords || data.records.length) / itemsPerPage));
+        setRecordCount(recCount);
+        setTotalRecords(data.maxRecords || data.totalRecords || data.records.length);
+        setTotalPages(data.pageCount || data.totalPages || Math.ceil((data.maxRecords || data.records.length) / itemsPerPage));
+        
+        // Seite vom Backend übernehmen (falls vorhanden)
+        if (data.currentPage !== undefined) {
+          setCurrentPage(data.currentPage);
+        } else if (data.page !== undefined) {
+          setCurrentPage(data.page);
+        }
 
-        // Nur automatisch selektieren wenn nicht skipSelect
-        if (!skipSelect && data.records.length > 0) {
+        // Index vom Backend übernehmen (falls vorhanden), sonst Standard-Logik
+        if (data.currentIndex !== undefined && data.records[data.currentIndex]) {
+          setCurrentIndex(data.currentIndex);
+          setCurrentRecord(data.records[data.currentIndex]);
+        } else if (!skipSelect && recCount > 0) {
           setCurrentRecord(data.records[0]);
           setCurrentIndex(0);
         } else if (!skipSelect) {
@@ -335,13 +349,26 @@ const FormProgram: React.FC = () => {
           setCurrentIndex(0);
         }
       } else if (data.dsResponse && Array.isArray(data.dsResponse.records)) {
+        const recCount = data.dsResponse.recordCount !== undefined ? data.dsResponse.recordCount : data.dsResponse.records.length;
+        
         loadedRecords = data.dsResponse.records;
         setRecords(data.dsResponse.records);
-        setTotalRecords(data.dsResponse.maxRecords || data.dsResponse.records.length);
-        setTotalPages(data.dsResponse.pageCount || Math.ceil((data.dsResponse.maxRecords || data.dsResponse.records.length) / itemsPerPage));
+        setRecordCount(recCount);
+        setTotalRecords(data.dsResponse.maxRecords || data.dsResponse.totalRecords || data.dsResponse.records.length);
+        setTotalPages(data.dsResponse.pageCount || data.dsResponse.totalPages || Math.ceil((data.dsResponse.maxRecords || data.dsResponse.records.length) / itemsPerPage));
+        
+        // Seite vom Backend übernehmen (falls vorhanden)
+        if (data.dsResponse.currentPage !== undefined) {
+          setCurrentPage(data.dsResponse.currentPage);
+        } else if (data.dsResponse.page !== undefined) {
+          setCurrentPage(data.dsResponse.page);
+        }
 
-        // Nur automatisch selektieren wenn nicht skipSelect
-        if (!skipSelect && data.dsResponse.records.length > 0) {
+        // Index vom Backend übernehmen (falls vorhanden), sonst Standard-Logik
+        if (data.dsResponse.currentIndex !== undefined && data.dsResponse.records[data.dsResponse.currentIndex]) {
+          setCurrentIndex(data.dsResponse.currentIndex);
+          setCurrentRecord(data.dsResponse.records[data.dsResponse.currentIndex]);
+        } else if (!skipSelect && recCount > 0) {
           setCurrentRecord(data.dsResponse.records[0]);
           setCurrentIndex(0);
         } else if (!skipSelect) {
@@ -350,12 +377,14 @@ const FormProgram: React.FC = () => {
         }
       } else {
         setRecords([]);
+        setRecordCount(0);
         if (!skipSelect) {
           setCurrentRecord({});
           setCurrentIndex(0);
         }
         setTotalRecords(0);
         setTotalPages(0);
+        setCurrentPage(1);
       }
 
       setIsLoading(false);
@@ -724,7 +753,20 @@ const FormProgram: React.FC = () => {
     }));
   };
 
-  const handleFilterKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+  // Filter-Focus: Wert vom aktuellen Datensatz vorschlagen und markieren
+  const handleFilterFocus = (e: React.FocusEvent<HTMLInputElement>, fieldName: string) => {
+    const currentValue = currentRecord[fieldName];
+    if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
+      const stringValue = String(currentValue);
+      setColumnFiltersTemp(prev => ({ ...prev, [fieldName]: stringValue }));
+      // Text komplett markieren nach kurzer Verzögerung
+      setTimeout(() => {
+        e.target.select();
+      }, 0);
+    }
+  };
+
+  const handleFilterKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>, fieldName: string) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       
@@ -734,6 +776,17 @@ const FormProgram: React.FC = () => {
       setCurrentPage(1);
       
       await loadRecords(1);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      
+      // Filter-Inhalt für dieses Feld löschen
+      setColumnFiltersTemp(prev => ({ ...prev, [fieldName]: '' }));
+      
+      // Fokus zurück zur Tabelle (aktuell selektierte Zeile)
+      const activeRow = document.getElementById(`row-${currentIndex}`);
+      if (activeRow) {
+        activeRow.focus();
+      }
     }
   };
 
@@ -1108,7 +1161,7 @@ const FormProgram: React.FC = () => {
               </div>
               <div className="form-group">
                 <button 
-                  onClick={() => navigate(`/program-generator?formId=${formId}`)} 
+                  onClick={() => navigate(`/program-generator?formId=${formId}&company=${selectedCompany}&user=${selectedUser}&language_id=${selectedLanguage}`)} 
                   className="btn btn-info flex items-center gap-2"
                   disabled={!formId}
                   title="Code Generator"
@@ -1140,7 +1193,7 @@ const FormProgram: React.FC = () => {
                   {editMode === 'add' && ' - Neuer Datensatz'}
                   {editMode === 'copy' && ' - Datensatz kopieren'}
                   {editMode === 'update' && ' - Datensatz bearbeiten'}
-                  {editMode === 'view' && records.length > 0 && ` - Datensatz ${currentIndex + 1} von ${records.length}`}
+                  {editMode === 'view' && recordCount > 0 && ` - Datensatz ${currentIndex + 1} von ${recordCount}`}
                   {editMode === 'view' && records.length === 0 && ' - Keine Datensätze'}
                 </h2>
 
@@ -1376,7 +1429,8 @@ const FormProgram: React.FC = () => {
                               type="text"
                               value={columnFiltersTemp[field.fieldName] || ''}
                               onChange={(e) => handleFilterChange(field.fieldName, e.target.value)}
-                              onKeyDown={handleFilterKeyDown}
+                              onKeyDown={(e) => handleFilterKeyDown(e, field.fieldName)}
+                              onFocus={(e) => handleFilterFocus(e, field.fieldName)}
                               placeholder="Filter... (Enter)"
                               className="input-field"
                               style={{ 
@@ -1404,13 +1458,26 @@ const FormProgram: React.FC = () => {
                             .filter(f => f.keyfield)
                             .every(kf => record[kf.fieldName] === currentRecord[kf.fieldName]) || false;
                           
+                          // Inaktiv-Check: verschiedene Feldnamen und Werte unterstützen
+                          const isInactive = record.active === false || record.active === 0 || record.active === '0' ||
+                                            record.is_active === false || record.is_active === 0 || record.is_active === '0' ||
+                                            record.deleted === true || record.deleted === 1 || record.deleted === '1';
+                          
+                          // Color-Feature: inaktive immer rot, sonst aus color-Feld
+                          const rowColor = isInactive ? 'red' : (record.color || '');
+                          const colorClass = rowColor && ['red', 'green', 'yellow', 'blue'].includes(rowColor) 
+                            ? `table-row-${rowColor}` 
+                            : '';
+                          
                           return (
                           <tr
                             key={index}
+                            id={`row-${index}`}
+                            tabIndex={0}
                             onClick={() => handleRowClick(record)}
                             className={`cursor-pointer hover:bg-gray-50 ${
-                              isCurrentRecord && editMode === 'view' ? 'bg-blue-50' : ''
-                            }`}
+                              isCurrentRecord && editMode === 'view' ? 'table-row-active' : ''
+                            } ${colorClass}`}
                           >
                             {tableFields.map(field => (
                               <td

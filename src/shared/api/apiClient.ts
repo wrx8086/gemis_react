@@ -60,13 +60,6 @@ const addSessionHeaders = (headers: HeadersInit): HeadersInit => {
     }
   }
   
-  // Debug: Was wird gesendet?
-  console.log('API Session Headers:', {
-    session_token: session?.session_token,
-    company: session?.company,
-    user_name: session?.user_name
-  });
-  
   if (session) {
     const h = headers as Record<string, string>;
     
@@ -102,7 +95,8 @@ export const apiGet = async (
     const searchParams = params instanceof URLSearchParams 
       ? params 
       : new URLSearchParams(params);
-    url += `?${searchParams.toString()}`;
+    // Leerzeichen als %20 statt + kodieren (Progress OpenEdge kompatibel)
+    url += `?${searchParams.toString().replace(/\+/g, '%20')}`;
   }
 
   let headers: HeadersInit = {
