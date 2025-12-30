@@ -63,6 +63,18 @@ const ${config.componentName} = () => {
   const messageBoxResolveRef = useRef(null);                // Promise-Resolver für MessageBox
   const messageBoxButtonRef = useRef(null);                 // Ref für primären Button (Fokus)
   
+  // Lookup/Autocomplete States
+  const [lookupState, setLookupState] = useState({
+    isOpen: false,
+    fieldName: null,
+    results: [],
+    selectedIndex: 0,
+    isLoading: false,
+    position: { top: 0, left: 0, width: 0 }
+  });
+  const lookupTimeoutRef = useRef(null);
+  const lookupInputRef = useRef(null);
+  
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50); // Default 50, kann von init überschrieben werden
   const itemsPerPageRef = useRef(50);
@@ -130,8 +142,9 @@ const ${config.componentName} = () => {
   // Keyboard Navigation für Tabelle (↑↓)
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Wenn MessageBox offen ist, nicht reagieren (MessageBox hat eigene Handler)
+      // Wenn MessageBox oder Lookup offen ist, nicht reagieren
       if (messageBox) return;
+      if (lookupState.isOpen) return;
       
       const activeElement = document.activeElement;
       const isInInput = activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA' || activeElement.tagName === 'SELECT');
@@ -304,7 +317,7 @@ const ${config.componentName} = () => {
     
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mutationMode, records, columnFiltersTemp, sortField, sortDirection, isDirty, searchExpanded, messageBox]);
+  }, [mutationMode, records, columnFiltersTemp, sortField, sortDirection, isDirty, searchExpanded, messageBox, lookupState.isOpen]);
 
   useEffect(() => { 
     if (!isInitialized) {
@@ -801,6 +814,8 @@ const ${config.componentName} = () => {
   };
 
   const handleFieldChange = (fieldName, value) => {
+    // Ref synchron aktualisieren (für sofortige Verfügbarkeit in Lookup etc.)
+    currentRecordRef.current = { ...currentRecordRef.current, [fieldName]: value };
     setCurrentRecord(prev => ({ ...prev, [fieldName]: value }));
     setIsDirty(true);
   };
@@ -866,7 +881,175 @@ const ${config.componentName} = () => {
     }
   };
 
+  // ============ LOOKUP/AUTOCOMPLETE FUNKTIONEN ============
+  
+  const handleLookupSearch = async (fieldName, searchValue, field) => {
+    if (!field.lookup || !field.lookup.enabled) return;
+    
+    const minChars = field.lookup.minChars || 2;
+    
+    // Zu wenig Zeichen - Lookup schliessen
+    if (!searchValue || searchValue.length < minChars) {
+      setLookupState(prev => ({ ...prev, isOpen: false, results: [], fieldName: null }));
+      return;
+    }
+    
+    // Timeout für Debouncing
+    if (lookupTimeoutRef.current) {
+      clearTimeout(lookupTimeoutRef.current);
+    }
+    
+    lookupTimeoutRef.current = setTimeout(async () => {
+      try {
+        setLookupState(prev => ({ ...prev, isLoading: true }));
+        
+        const params = new URLSearchParams({
+          formId: FORM_ID,
+          function: 'lookup',
+          lookupField: fieldName,
+          search: searchValue
+        });
+        
+        // displayFields mitsenden (damit Backend weiss welche Felder zurückzugeben sind)
+        if (field.lookup.displayFields && field.lookup.displayFields.length > 0) {
+          params.append('displayFields', field.lookup.displayFields.filter(f => f).join(','));
+        }
+        
+        // Alle aktuellen Feldwerte als Query-Parameter hinzufügen (für Kontext, z.B. Lkz)
+        FORM_CONFIG.forEach(f => {
+          const fieldValue = currentRecordRef.current[f.fieldName];
+          if (fieldValue !== undefined && fieldValue !== null) {
+            params.append(f.fieldName, String(fieldValue));
+          }
+        });
+        
+        const data = await apiGet('/dynamic-form', params);
+        
+        if (data.results && Array.isArray(data.results)) {
+          // Position des Input-Feldes ermitteln
+          const inputElement = inputRefs.current[field.uniqueId];
+          let position = { top: 0, left: 0, width: 300 };
+          
+          if (inputElement) {
+            const rect = inputElement.getBoundingClientRect();
+            const containerRect = inputElement.closest('.container-app')?.getBoundingClientRect() || { top: 0, left: 0 };
+            position = {
+              top: rect.bottom - containerRect.top + window.scrollY,
+              left: rect.left - containerRect.left,
+              width: Math.max(rect.width, 300)
+            };
+          }
+          
+          setLookupState({
+            isOpen: true,
+            fieldName: fieldName,
+            results: data.results,
+            selectedIndex: 0,
+            isLoading: false,
+            position: position,
+            field: field
+          });
+          
+          lookupInputRef.current = inputElement;
+        }
+      } catch (err) {
+        console.error('Lookup error:', err);
+        setLookupState(prev => ({ ...prev, isOpen: false, isLoading: false }));
+      }
+    }, 300); // 300ms Debounce
+  };
+  
+  const handleLookupSelect = (result) => {
+    if (!lookupState.field || !lookupState.field.lookup) return;
+    
+    const lookup = lookupState.field.lookup;
+    const fieldName = lookupState.fieldName;
+    
+    // Hauptwert übernehmen
+    const valueField = lookup.valueField || fieldName;
+    const newValue = result[valueField];
+    
+    // Record aktualisieren
+    const updatedRecord = { ...currentRecordRef.current, [fieldName]: newValue };
+    
+    // Zusätzliche Felder übernehmen (returnFields)
+    if (lookup.returnFields) {
+      Object.entries(lookup.returnFields).forEach(([sourceField, targetField]) => {
+        if (result[sourceField] !== undefined) {
+          updatedRecord[targetField] = result[sourceField];
+        }
+      });
+    }
+    
+    // Ref und State aktualisieren
+    currentRecordRef.current = updatedRecord;
+    setCurrentRecord(updatedRecord);
+    setIsDirty(true);
+    setLookupState(prev => ({ ...prev, isOpen: false, results: [], fieldName: null }));
+    
+    // Fokus zurück aufs Input
+    if (lookupInputRef.current) {
+      lookupInputRef.current.focus();
+    }
+  };
+  
+  const handleLookupKeyDown = (e, field) => {
+    if (!lookupState.isOpen || lookupState.fieldName !== field.fieldName) return false;
+    
+    const results = lookupState.results;
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setLookupState(prev => ({
+        ...prev,
+        selectedIndex: Math.min(prev.selectedIndex + 1, results.length - 1)
+      }));
+      return true;
+    }
+    
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setLookupState(prev => ({
+        ...prev,
+        selectedIndex: Math.max(prev.selectedIndex - 1, 0)
+      }));
+      return true;
+    }
+    
+    if (e.key === 'Enter' && results.length > 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      handleLookupSelect(results[lookupState.selectedIndex]);
+      return true;
+    }
+    
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setLookupState(prev => ({ ...prev, isOpen: false, results: [], fieldName: null }));
+      return true;
+    }
+    
+    if (e.key === 'Tab') {
+      setLookupState(prev => ({ ...prev, isOpen: false, results: [], fieldName: null }));
+      return false; // Tab normal weiterleiten
+    }
+    
+    return false;
+  };
+  
+  const closeLookup = () => {
+    setLookupState(prev => ({ ...prev, isOpen: false, results: [], fieldName: null }));
+  };
+
+  // ============ ENDE LOOKUP FUNKTIONEN ============
+
   const handleKeyDown = (e, field) => {
+    // Lookup-Tastatureingaben zuerst prüfen
+    if (field.lookup && field.lookup.enabled) {
+      const handled = handleLookupKeyDown(e, field);
+      if (handled) return;
+    }
+    
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       
@@ -1303,6 +1486,67 @@ const ${config.componentName} = () => {
           margin-top: 2px;
         }
         
+        /* Lookup/Autocomplete Overlay */
+        .lookup-overlay {
+          position: absolute;
+          background: white;
+          border: 1px solid var(--color-border, #d1d5db);
+          border-radius: var(--radius-md, 6px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+          z-index: 1000;
+          max-height: 300px;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+        .lookup-loading {
+          padding: 12px;
+          text-align: center;
+          color: var(--color-text-muted, #6b7280);
+        }
+        .lookup-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+        }
+        .lookup-table thead {
+          background: var(--color-bg-secondary, #f3f4f6);
+          position: sticky;
+          top: 0;
+        }
+        .lookup-table th {
+          padding: 8px 12px;
+          text-align: left;
+          font-weight: 600;
+          border-bottom: 1px solid var(--color-border, #d1d5db);
+          white-space: nowrap;
+        }
+        .lookup-table tbody {
+          overflow-y: auto;
+          max-height: 250px;
+        }
+        .lookup-table td {
+          padding: 8px 12px;
+          border-bottom: 1px solid var(--color-border-light, #e5e7eb);
+          white-space: nowrap;
+        }
+        .lookup-table tr.lookup-row {
+          cursor: pointer;
+          transition: background 0.1s;
+        }
+        .lookup-table tr.lookup-row:hover {
+          background: var(--color-bg-hover, #f9fafb);
+        }
+        .lookup-table tr.lookup-row.selected {
+          background: var(--color-primary-light, #dbeafe);
+        }
+        .lookup-no-results {
+          padding: 12px;
+          text-align: center;
+          color: var(--color-text-muted, #6b7280);
+          font-style: italic;
+        }
+        
         /* MessageBox Overlay */
         .message-box-overlay {
           position: fixed;
@@ -1548,10 +1792,18 @@ const ${config.componentName} = () => {
                               if (fieldErrors[field.fieldName]) {
                                 setFieldErrors(prev => ({ ...prev, [field.fieldName]: null }));
                               }
+                              // Lookup-Suche auslösen
+                              if (field.lookup && field.lookup.enabled) {
+                                handleLookupSearch(field.fieldName, e.target.value, field);
+                              }
                             }}
                             onBlur={(e) => {
                               if (field.onChangeAction) {
                                 handleChangeAction(field.fieldName, e.target.value, field.onChangeAction);
+                              }
+                              // Lookup mit Verzögerung schliessen (damit Klick funktioniert)
+                              if (field.lookup && field.lookup.enabled) {
+                                setTimeout(() => closeLookup(), 200);
                               }
                             }}
                             onKeyDown={(e) => handleKeyDown(e, field)}
@@ -1561,6 +1813,7 @@ const ${config.componentName} = () => {
                             className={\`input-field\${(field.type === 'integer' || field.type === 'decimal') && !field.showSpinner ? ' no-spinner' : ''}\${fieldErrors[field.fieldName] ? ' field-error' : ''}\`}
                             style={{ textAlign: field.align || 'left' }}
                             autoComplete={
+                              field.lookup && field.lookup.enabled ? 'off' :
                               field.password ? 'current-password' :
                               field.fieldName.includes('user_name') || field.fieldName.includes('username') ? 'username' :
                               field.fieldName.includes('email') ? 'email' :
@@ -1766,6 +2019,51 @@ const ${config.componentName} = () => {
           </div>
         </div>
       </div>
+      
+      {/* Lookup/Autocomplete Overlay */}
+      {lookupState.isOpen && lookupState.field && (
+        <div 
+          className="lookup-overlay"
+          style={{
+            top: lookupState.position.top,
+            left: lookupState.position.left,
+            width: lookupState.position.width,
+            minWidth: '300px'
+          }}
+        >
+          {lookupState.isLoading ? (
+            <div className="lookup-loading">{getLabel('MSG_LOADING')}</div>
+          ) : lookupState.results.length === 0 ? (
+            <div className="lookup-no-results">{getLabel('MSG_NO_RECORDS')}</div>
+          ) : (
+            <div style={{ overflowY: 'auto', maxHeight: '250px' }}>
+              <table className="lookup-table">
+                <thead>
+                  <tr>
+                    {(lookupState.field.lookup.displayFields || [lookupState.fieldName]).filter(f => f).map(displayField => (
+                      <th key={displayField}>{displayField}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {lookupState.results.map((result, index) => (
+                    <tr 
+                      key={index}
+                      className={\`lookup-row \${index === lookupState.selectedIndex ? 'selected' : ''}\`}
+                      onClick={() => handleLookupSelect(result)}
+                      onMouseEnter={() => setLookupState(prev => ({ ...prev, selectedIndex: index }))}
+                    >
+                      {(lookupState.field.lookup.displayFields || [lookupState.fieldName]).filter(f => f).map(displayField => (
+                        <td key={displayField}>{result[displayField] ?? ''}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
       
       {/* MessageBox */}
       {messageBox && (

@@ -52,6 +52,14 @@ interface Field {
   keyfield?: boolean;
   password?: boolean;
   onChangeAction?: string;
+  // Lookup/Autocomplete Konfiguration
+  lookup?: {
+    enabled: boolean;
+    minChars?: number;
+    displayFields?: string[];
+    valueField?: string;
+    returnFields?: Record<string, string>;
+  };
 }
 
 const FormDesigner: React.FC = () => {
@@ -264,7 +272,8 @@ const FormDesigner: React.FC = () => {
             hidden: field.hidden ?? false,
             showSpinner: field.showSpinner ?? false,
             placeholder: field.placeholder ?? '',
-            align: field.align ?? 'left'
+            align: field.align ?? 'left',
+            lookup: field.lookup
           };
         });
         setSelectedFields(normalizedFields);
@@ -355,7 +364,11 @@ const FormDesigner: React.FC = () => {
         showInTable: field.showInTable ?? false,
         keyfield: field.keyfield ?? false,
         password: field.password ?? false,
-        onChangeAction: field.onChangeAction
+        onChangeAction: field.onChangeAction,
+        lookup: field.lookup ? {
+          ...field.lookup,
+          displayFields: (field.lookup.displayFields || []).filter(s => s)
+        } : undefined
       };
     });
 
@@ -1049,6 +1062,98 @@ const FormDesigner: React.FC = () => {
                                 <small style={{ color: 'var(--color-gray-500)', fontSize: '11px' }}>
                                   API-Call: function=change&field={field.fieldName}&action=...
                                 </small>
+                              </div>
+                            )}
+
+                            {/* Lookup/Autocomplete Konfiguration */}
+                            <div className="fd-flex-center fd-flex-gap-sm" style={{ marginTop: '8px' }}>
+                              <input
+                                type="checkbox"
+                                checked={!!field.lookup?.enabled}
+                                onChange={(e) => updateFieldSettings(field.uniqueId, { 
+                                  lookup: e.target.checked 
+                                    ? { enabled: true, minChars: 2, displayFields: [], valueField: field.fieldName, returnFields: {} }
+                                    : undefined 
+                                })}
+                                className="checkbox"
+                              />
+                              <label className="label" style={{ marginBottom: 0 }}>Lookup/Suchfeld</label>
+                            </div>
+                            
+                            {field.lookup?.enabled && (
+                              <div style={{ marginLeft: '20px', marginTop: '8px', padding: '8px', background: 'var(--color-gray-50)', borderRadius: '4px' }}>
+                                <div className="fd-form-group">
+                                  <label className="label">Min. Zeichen:</label>
+                                  <input
+                                    type="number"
+                                    value={field.lookup.minChars || 2}
+                                    onChange={(e) => updateFieldSettings(field.uniqueId, { 
+                                      lookup: { ...field.lookup, enabled: true, minChars: parseInt(e.target.value) || 2 }
+                                    })}
+                                    min="1"
+                                    max="10"
+                                    className="input-field"
+                                    style={{ width: '80px' }}
+                                  />
+                                </div>
+                                <div className="fd-form-group">
+                                  <label className="label">Anzeigefelder (kommagetrennt):</label>
+                                  <input
+                                    type="text"
+                                    value={(field.lookup.displayFields || []).join(', ')}
+                                    onChange={(e) => updateFieldSettings(field.uniqueId, { 
+                                      lookup: { 
+                                        ...field.lookup,
+                                        enabled: true,
+                                        displayFields: e.target.value.split(',').map(s => s.trim())
+                                      }
+                                    })}
+                                    placeholder="z.B. plz, ort, kanton"
+                                    className="input-field"
+                                  />
+                                  <small style={{ color: 'var(--color-gray-500)', fontSize: '11px' }}>
+                                    Spalten die im Lookup-Overlay angezeigt werden
+                                  </small>
+                                </div>
+                                <div className="fd-form-group">
+                                  <label className="label">Wertfeld:</label>
+                                  <input
+                                    type="text"
+                                    value={field.lookup.valueField || field.fieldName}
+                                    onChange={(e) => updateFieldSettings(field.uniqueId, { 
+                                      lookup: { ...field.lookup, enabled: true, valueField: e.target.value }
+                                    })}
+                                    placeholder={field.fieldName}
+                                    className="input-field"
+                                  />
+                                  <small style={{ color: 'var(--color-gray-500)', fontSize: '11px' }}>
+                                    Welches Feld aus dem Ergebnis übernommen wird
+                                  </small>
+                                </div>
+                                <div className="fd-form-group">
+                                  <label className="label">Zusätzliche Felder (JSON):</label>
+                                  <input
+                                    key={`returnFields-${field.uniqueId}`}
+                                    type="text"
+                                    defaultValue={JSON.stringify(field.lookup.returnFields || {})}
+                                    onBlur={(e) => {
+                                      try {
+                                        const parsed = JSON.parse(e.target.value || '{}');
+                                        updateFieldSettings(field.uniqueId, { 
+                                          lookup: { ...field.lookup, enabled: true, returnFields: parsed }
+                                        });
+                                      } catch (err) {
+                                        // Bei ungültigem JSON: zurücksetzen auf letzten gültigen Wert
+                                        e.target.value = JSON.stringify(field.lookup?.returnFields || {});
+                                      }
+                                    }}
+                                    placeholder='{"plz": "plz", "kanton": "kanton"}'
+                                    className="input-field"
+                                  />
+                                  <small style={{ color: 'var(--color-gray-500)', fontSize: '11px' }}>
+                                    Format: {`{"quellfeld": "zielfeld"}`} - Eingabe wird bei Verlassen des Feldes übernommen
+                                  </small>
+                                </div>
                               </div>
                             )}
 
