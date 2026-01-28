@@ -24,6 +24,7 @@ const LoginPage: React.FC = () => {
   const apiBaseUrl = `${config.baseUrl}${config.apiPath}`;
 
   useEffect(() => {
+    document.title = 'Login - GeMIS';
     loadCompanies();
     const lastUserName = localStorage.getItem('lastUserName');
     if (lastUserName) {
@@ -108,12 +109,7 @@ const LoginPage: React.FC = () => {
         // Session-Token aus verschiedenen möglichen Feldnamen holen
         const sessionToken = sessionData.session_token || sessionData.sessionToken || data.session_token || data.token || '';
         
-        // Debug: Was kommt vom Backend?
-        console.log('Login Response:', data);
-        console.log('Session Data:', sessionData);
-        console.log('Session Token:', sessionToken);
-        
-        // Session-Daten im Context speichern - MIT session_token!
+        // Session-Daten im Context speichern
         setSession({
           session_token: sessionToken,
           company: sessionData.company || selectedCompany,

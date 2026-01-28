@@ -837,13 +837,15 @@ const FormDesigner: React.FC = () => {
                             >
                               Bearbeiten
                             </button>
-                            <button
-                              onClick={() => removeField(field.uniqueId)}
-                              className="fd-button-text"
-                              style={{ color: '#ef4444' }}
-                            >
-                              <X className="fd-icon-sm" />
-                            </button>
+                            {editingField !== field.uniqueId && (
+                              <button
+                                onClick={() => removeField(field.uniqueId)}
+                                className="fd-button-text"
+                                style={{ color: '#ef4444' }}
+                              >
+                                <X className="fd-icon-sm" />
+                              </button>
+                            )}
                           </div>
                         </div>
 

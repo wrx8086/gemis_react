@@ -9,6 +9,8 @@ const Dashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
+    document.title = 'Dashboard - GeMIS';
+    
     // Nur laden wenn Session da ist und Menü fehlt
     if (session && (!session.menu || session.menu.length === 0)) {
       loadMenu();

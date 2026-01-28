@@ -585,7 +585,17 @@ const ${config.componentName} = () => {
       
       if (mutationMode === 'add' || mutationMode === 'copy') {
         params.append('function', 'create');
-        const response = await apiPost(\`/dynamic-form?\${params.toString()}\`, { record: currentRecord });
+        
+        // Select-Keyfield-Werte in Record mergen (diese sind in keyfieldValuesRef, nicht in currentRecord)
+        const recordToSave = { ...currentRecordRef.current };
+        FORM_CONFIG.filter(f => f.keyfield && f.type === 'select').forEach(field => {
+          const value = keyfieldValuesRef.current[field.fieldName];
+          if (value !== undefined && value !== '') {
+            recordToSave[field.fieldName] = value;
+          }
+        });
+        
+        const response = await apiPost(\`/dynamic-form?\${params.toString()}\`, { record: recordToSave });
         
         // Fehlerbehandlung mit fieldErrors
         if (response.success === false) {
@@ -642,7 +652,7 @@ const ${config.componentName} = () => {
         }
       } else if (mutationMode === 'edit') {
         params.append('function', 'update');
-        const response = await apiPatch(\`/dynamic-form?\${params.toString()}\`, { record: currentRecord });
+        const response = await apiPatch(\`/dynamic-form?\${params.toString()}\`, { record: currentRecordRef.current });
         
         // Fehlerbehandlung mit fieldErrors
         if (response.success === false) {
@@ -675,7 +685,7 @@ const ${config.componentName} = () => {
           const questionResult = await showMessage(response.askQuestion);
           if (questionResult === 'yes' && response.askQuestion.fieldUpdate) {
             // Bei "Ja": Felder aus fieldUpdate in Record übernehmen und normalen Update senden
-            const updatedRecord = { ...currentRecord, ...response.askQuestion.fieldUpdate };
+            const updatedRecord = { ...currentRecordRef.current, ...response.askQuestion.fieldUpdate };
             
             const updateParams = new URLSearchParams({
               formId: FORM_ID,
@@ -1101,15 +1111,19 @@ const ${config.componentName} = () => {
   };
 
   const handleFilterChange = (fieldName, value) => {
-    setColumnFiltersTemp(prev => ({ ...prev, [fieldName]: value }));
+    const newFilters = { ...columnFiltersRef.current, [fieldName]: value };
+    columnFiltersRef.current = newFilters;  // Synchron für Live-Filterung
+    setColumnFiltersTemp(newFilters);
   };
 
   // Filter-Focus: Wert vom aktuellen Datensatz vorschlagen und markieren
   const handleFilterFocus = (e, fieldName) => {
-    const currentValue = currentRecord[fieldName];
+    const currentValue = currentRecordRef.current[fieldName];
     if (currentValue !== undefined && currentValue !== null && currentValue !== '') {
       const stringValue = String(currentValue);
-      setColumnFiltersTemp(prev => ({ ...prev, [fieldName]: stringValue }));
+      const newFilters = { ...columnFiltersRef.current, [fieldName]: stringValue };
+      columnFiltersRef.current = newFilters;  // Synchron für Live-Filterung
+      setColumnFiltersTemp(newFilters);
       // Text komplett markieren nach kurzer Verzögerung (damit React den Wert setzt)
       setTimeout(() => {
         e.target.select();
@@ -1123,18 +1137,19 @@ const ${config.componentName} = () => {
       e.stopPropagation();
       
       // IMMER Backend-Request bei ENTER (Server-Pagination)
-      const newFilters = { ...columnFiltersTemp };
-      columnFiltersRef.current = newFilters;
       setCurrentPage(1);
       
-      // Direkt laden - die ref ist bereits aktualisiert
+      // Direkt laden - die ref ist bereits aktualisiert durch handleFilterChange
       await loadRecords(1);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
       
-      // Filter-Inhalt für dieses Feld löschen
-      setColumnFiltersTemp(prev => ({ ...prev, [fieldName]: '' }));
+      // Filter-Inhalt für dieses Feld löschen (Ref und State)
+      const newFilters = { ...columnFiltersRef.current };
+      delete newFilters[fieldName];
+      columnFiltersRef.current = newFilters;
+      setColumnFiltersTemp(newFilters);
       
       // Fokus zurück zur Tabelle (aktuell selektierte Zeile)
       const activeRow = document.getElementById(\`row-\${currentIndex}\`);
@@ -1147,13 +1162,26 @@ const ${config.componentName} = () => {
   const getFilteredAndSortedRecords = () => {
     let filtered = [...records];
     
-    // Clientseitiges Filtern mit TEMP-Filtern (live während Eingabe)
+    // Clientseitiges Filtern mit Ref (synchron aktualisiert)
+    const currentFilters = columnFiltersRef.current;
     filtered = filtered.filter(record => {
-      return Object.keys(columnFiltersTemp).every(fieldName => {
-        const filterValue = columnFiltersTemp[fieldName];
+      return Object.keys(currentFilters).every(fieldName => {
+        const filterValue = currentFilters[fieldName];
         if (!filterValue) return true;
-        const recordValue = String(record[fieldName] || '').toLowerCase();
-        return recordValue.includes(filterValue.toLowerCase());
+        
+        const recordValue = record[fieldName];
+        
+        // Spezieller Check für Boolean-Filter (true/false)
+        if (filterValue === 'true' || filterValue === 'false') {
+          const filterBool = filterValue === 'true';
+          // Verschiedene Werte als "truthy" interpretieren
+          const recordBool = recordValue === true || recordValue === 1 || recordValue === '1' || recordValue === 'true' || recordValue === 'yes';
+          return filterBool === recordBool;
+        }
+        
+        // Standard: String-Substring-Vergleich
+        const recordStr = String(recordValue || '').toLowerCase();
+        return recordStr.includes(filterValue.toLowerCase());
       });
     });
 
@@ -1888,16 +1916,44 @@ const ${config.componentName} = () => {
                   <tr>
                     {tableFields.map(field => (
                       <th key={\`filter-\${field.uniqueId}\`} className="table-filter-cell">
-                        <input
-                          type="text"
-                          value={columnFiltersTemp[field.fieldName] || ''}
-                          onChange={(e) => handleFilterChange(field.fieldName, e.target.value)}
-                          onKeyDown={(e) => handleFilterKeyDown(e, field.fieldName)}
-                          onFocus={(e) => handleFilterFocus(e, field.fieldName)}
-                          placeholder="Filter... (Enter)"
-                          className="input-field table-filter-input"
-                          onClick={(e) => e.stopPropagation()}
-                        />
+                        {field.type === 'checkbox' || field.type === 'logical' ? (
+                          <select
+                            value={columnFiltersTemp[field.fieldName] || ''}
+                            onChange={(e) => {
+                              const newValue = e.target.value;
+                              // Neuen Filter-State direkt berechnen (nicht aus altem State)
+                              const newFilters = { ...columnFiltersRef.current };
+                              if (newValue) {
+                                newFilters[field.fieldName] = newValue;
+                              } else {
+                                delete newFilters[field.fieldName];
+                              }
+                              // Ref UND State synchron setzen
+                              columnFiltersRef.current = newFilters;
+                              setColumnFiltersTemp(newFilters);
+                              // Sofort laden
+                              setCurrentPage(1);
+                              loadRecords(1);
+                            }}
+                            className="select-field table-filter-input"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <option value="">Alle</option>
+                            <option value="true">Ja</option>
+                            <option value="false">Nein</option>
+                          </select>
+                        ) : (
+                          <input
+                            type="text"
+                            value={columnFiltersTemp[field.fieldName] || ''}
+                            onChange={(e) => handleFilterChange(field.fieldName, e.target.value)}
+                            onKeyDown={(e) => handleFilterKeyDown(e, field.fieldName)}
+                            onFocus={(e) => handleFilterFocus(e, field.fieldName)}
+                            placeholder="Filter... (Enter)"
+                            className="input-field table-filter-input"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        )}
                       </th>
                     ))}
                   </tr>
